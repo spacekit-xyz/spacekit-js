@@ -21,23 +21,24 @@ locally (IndexedDB) or via `spacekit-storage-node` and connects to other `spacek
 It also integrates the Post-Quantum Quantum Verkle WASM module to compute state roots and proofs directly from VM storage.
 
 ### Contents
-- `#what-is-spacekit-js`
-- `#production-readiness`
-- `#developer-docs`
-- `#how-it-compares`
-- `#use-cases`
-- `#quick-usage`
-- `#notes`
-- `#mini-spacekitvm-browser`
-- `#json-rpc-extensions`
-- `#json-rpc-http-server`
-- `#indexeddb-autosync--snapshots`
-- `#rollup-export-to-spacekit-storage-node`
-- `#browser-extension-mv3-skeleton`
-- `#browser-demo-features`
-- `#browser-demo-page`
-- `#deployment-checklist`
-- `#glossary`
+- [What is spacekit-js?](#what-is-spacekit-js)
+- [Production readiness](#production-readiness)
+- [Developer docs](#developer-docs)
+- [How it compares](#how-it-compares)
+- [Use cases](#use-cases)
+- [Installation](#installation)
+- [Quick usage](#quick-usage)
+- [WASM assets](#wasm-assets)
+- [Notes](#notes)
+- [Spacekit-JS Browser VM](#spacekit-js-browser-vm)
+- [Quantum Verkle](#quantum-verkle-state-root--proofs)
+- [Sequencer mode](#sequencer-mode-rollup-bundles)
+- [JSON-RPC extensions](#json-rpc-extensions)
+- [JSON-RPC HTTP server](#json-rpc-http-server)
+- [IndexedDB autosync + snapshots](#indexeddb-autosync--snapshots)
+- [Rollup export](#rollup-export-to-spacekit-storage-node)
+- [Browser extension (MV3)](#browser-extension-mv3-skeleton)
+- [Glossary](#glossary)
 
 ### Production readiness
 Core functionality is production-ready (WASM execution, JSON-RPC, browser demo, rollup bundling,
