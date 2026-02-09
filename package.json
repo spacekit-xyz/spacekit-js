@@ -1,0 +1,91 @@
+{
+  "name": "@spacekit/spacekit-js",
+  "version": "1.0.0",
+  "description": "Browser-native WASM VM for SpaceKit smart contracts with JSON-RPC, EIP-1193, and P2P sync",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./vm": {
+      "import": "./dist/vm/spacekitvm.js",
+      "types": "./dist/vm/spacekitvm.d.ts"
+    },
+    "./storage": {
+      "import": "./dist/storage.js",
+      "types": "./dist/storage.d.ts"
+    },
+    "./contracts": {
+      "import": "./dist/contracts/index.js",
+      "types": "./dist/contracts/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "license": "MIT",
+  "author": "SpaceKit Team",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spacekit-xyz/spacekit-js"
+  },
+  "homepage": "https://spacekit.xyz",
+  "bugs": {
+    "url": "https://github.com/spacekit-xyz/spacekit-js/issues"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "spacekit",
+    "blockchain",
+    "wasm",
+    "smart-contracts",
+    "vm",
+    "eip-1193",
+    "json-rpc",
+    "p2p",
+    "web3"
+  ],
+  "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.80",
+    "@noble/ed25519": "^2.3.0",
+    "@noble/hashes": "^1.5.0",
+    "buffer": "^6.0.3",
+    "wasm-metering": "^0.2.1"
+  },
+  "scripts": {
+    "build:quantum-verkle-wasm": "bash scripts/build-quantum-verkle-wasm.sh",
+    "build": "tsc -p tsconfig.json && npm run copy:assets",
+    "copy:assets": "mkdir -p dist/wasm",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsc -p tsconfig.json && node --test dist/spacetime/*.test.js",
+    "pq:wasm": "bash scripts/build-sphincs-wasm.sh",
+    "prepublishOnly": "npm run build"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0",
+    "react-dom": ">=18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": false
+    },
+    "react-dom": {
+      "optional": false
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^20.15.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "typescript": "^5.5.4"
+  }
+}

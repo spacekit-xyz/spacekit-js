@@ -1,0 +1,85 @@
+import { loadQuantumVerkleWasm } from "../quantum_verkle.js";
+import { bytesToHex, hexToBytes } from "../storage.js";
+import { sha256Hex } from "./hash.js";
+export class QuantumVerkleBridge {
+    module;
+    constructor(module) {
+        this.module = module;
+    }
+    static async create(options = {}) {
+        const mod = await loadQuantumVerkleWasm(options);
+        return new QuantumVerkleBridge(mod);
+    }
+    async computeRoot(entries) {
+        if (entries.length === 0) {
+            return "verkle:empty";
+        }
+        const tree = new this.module.QuantumVerkleWasm();
+        for (const entry of entries) {
+            const { addressHex, keyHex } = await deriveQuantumKey(entry.keyHex);
+            const valueHex = normalizeU256Hex(entry.valueHex);
+            tree.set(addressHex, keyHex, valueHex, entry.auxHex ?? null);
+        }
+        return `verkle:${tree.root_hex()}`;
+    }
+    async computeProof(entries, keyHex) {
+        const tree = new this.module.QuantumVerkleWasm();
+        for (const entry of entries) {
+            const { addressHex, keyHex } = await deriveQuantumKey(entry.keyHex);
+            const valueHex = normalizeU256Hex(entry.valueHex);
+            tree.set(addressHex, keyHex, valueHex, entry.auxHex ?? null);
+        }
+        const { addressHex, keyHex: verkleKey } = await deriveQuantumKey(keyHex);
+        const valueHex = entries.find((entry) => entry.keyHex === keyHex)?.valueHex ?? null;
+        const proofBytes = tree.create_proof(addressHex, verkleKey);
+        return {
+            keyHex,
+            valueHex,
+            stateRoot: `verkle:${tree.root_hex()}`,
+            verkleProofHex: bytesToHex(proofBytes),
+        };
+    }
+    async verifyProof(proof) {
+        if (!proof.valueHex) {
+            return false;
+        }
+        const tree = new this.module.QuantumVerkleWasm();
+        const { addressHex, keyHex } = await deriveQuantumKey(proof.keyHex);
+        const valueHex = normalizeU256Hex(proof.valueHex);
+        const proofBytes = hexToBytes(strip0x(proof.verkleProofHex));
+        return tree.verify_proof(proofBytes, addressHex, keyHex, valueHex);
+    }
+}
+export function buildQuantumEntries(storage) {
+    if (!storage.entries) {
+        return [];
+    }
+    return storage.entries().map((entry) => {
+        const keyHex = bytesToHex(entry.key);
+        const valueHex = bytesToHex(entry.value);
+        const auxHex = storage.getAux ? storage.getAux(entry.key) : undefined;
+        return {
+            keyHex,
+            valueHex,
+            auxHex: auxHex ? bytesToHex(auxHex) : null,
+        };
+    });
+}
+export async function verifyQuantumVerkleProof(proof, options = {}) {
+    const bridge = await QuantumVerkleBridge.create(options);
+    return bridge.verifyProof(proof);
+}
+async function deriveQuantumKey(keyHex) {
+    const keyBytes = hexToBytes(strip0x(keyHex));
+    const hashHex = await sha256Hex(keyBytes);
+    const addressHex = hashHex.slice(0, 40);
+    const fullKeyHex = hashHex.slice(0, 64);
+    return { addressHex, keyHex: fullKeyHex };
+}
+function normalizeU256Hex(valueHex) {
+    const stripped = strip0x(valueHex).padStart(64, "0");
+    return stripped;
+}
+function strip0x(value) {
+    return value.startsWith("0x") ? value.slice(2) : value;
+}
