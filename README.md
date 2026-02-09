@@ -1,7 +1,8 @@
-# SpaceKit-JS VM JavaScript Host (Browser)
+# SpaceKit‑JS — Quantum‑Safe Browser & IoT Blockchain VM
 
-TypeScript host SDK and browser VM for running SpaceKit WASM smart contracts.
-SpaceKitJS is an in-browser Ethereum node that runs WASM instead of EVM bytecode, with extension points for AI (LLM), storage, compute, networking, messaging, reputation, etc.
+A quantum‑safe, browser‑native blockchain VM and TypeScript SDK for running SpaceKit WASM smart contracts on browsers, IoT devices, and servers.
+
+SpaceKit‑JS replaces EVM bytecode with WASM and adds built‑in modules for AI, storage, compute, networking, messaging, and decentralized content sharing.
 
 This provides the import modules expected by the contracts under `contracts/`:
 - `env`
