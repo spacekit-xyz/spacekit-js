@@ -1,6 +1,6 @@
-# SpaceKit‑JS — Quantum‑Safe Browser & IoT Blockchain VM
+# SpaceKit‑JS — Quantum‑Safe Multi‑Runtime Blockchain VM
 
-A quantum‑safe, browser‑native blockchain VM and TypeScript SDK for running SpaceKit WASM smart contracts on browsers, IoT devices, and servers.
+A quantum‑safe, multi‑runtime blockchain VM and TypeScript SDK for running SpaceKit WASM smart contracts on **browsers**, **Node.js**, and **Bun**.
 
 SpaceKit‑JS replaces EVM bytecode with WASM and adds built‑in modules for AI, storage, compute, networking, messaging, and decentralized content sharing.
 
@@ -14,23 +14,27 @@ This provides the import modules expected by the contracts under `contracts/`:
 - `spacekit_llm`
 
 ## What is spacekit-js?
-`spacekit-js` is a browser-native VM and host SDK for Spacekit WASM smart contracts.
-It runs the same contracts in a browser or compute node, exposes JSON-RPC and EIP-1193
+`spacekit-js` is a multi‑runtime VM and host SDK for Spacekit WASM smart contracts.
+It runs the same contracts in a browser, Node.js, or Bun, exposes JSON-RPC and EIP-1193
 for dapp compatibility, supports rollup bundling + Merkle proofs, and persists state
-locally (IndexedDB) or via `spacekit-storage-node` and connects to other `spacekit-compute-node` instances.
+locally (IndexedDB or polyfilled equivalent) or via `spacekit-storage-node` and connects
+to other `spacekit-compute-node` instances.
 It also integrates the Post-Quantum Quantum Verkle WASM module to compute state roots and proofs directly from VM storage.
 
 ### Contents
 - [What is spacekit-js?](#what-is-spacekit-js)
+- [Multi-runtime support](#multi-runtime-support)
 - [Production readiness](#production-readiness)
 - [Developer docs](#developer-docs)
 - [How it compares](#how-it-compares)
 - [Use cases](#use-cases)
 - [Installation](#installation)
 - [Quick usage](#quick-usage)
+- [Running on Node.js](#running-on-nodejs)
+- [Running on Bun](#running-on-bun)
 - [WASM assets](#wasm-assets)
 - [Notes](#notes)
-- [Spacekit-JS Browser VM](#spacekit-js-browser-vm)
+- [Spacekit-JS VM](#spacekit-js-vm)
 - [Quantum Verkle](#quantum-verkle-state-root--proofs)
 - [Sequencer mode](#sequencer-mode-rollup-bundles)
 - [JSON-RPC extensions](#json-rpc-extensions)
@@ -39,6 +43,50 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 - [Rollup export](#rollup-export-to-spacekit-storage-node)
 - [Browser extension (MV3)](#browser-extension-mv3-skeleton)
 - [Glossary](#glossary)
+
+### Multi-runtime support
+
+SpaceKit‑JS runs on three deployment targets from the same codebase:
+
+| Runtime | Status | Entry point | IndexedDB |
+| --- | --- | --- | --- |
+| **Browser** | Stable | `import` from `@spacekit/spacekit-js` | Native |
+| **Node.js** (>=18) | Stable | `node dist/entry-node.js` | In-memory or persistent (see below) |
+| **Bun** | Stable | `bun dist/entry-bun.js` | In-memory or persistent (see below) |
+
+All three targets share the same TypeScript source, WASM contracts, and JSON-RPC interface.
+Server runtimes (Node.js / Bun) use an IndexedDB implementation so that
+`IndexedDbStorageAdapter`, `IndexedDbBlockStore`, `SessionStore`, and all other
+IndexedDB-backed classes work without modification.
+
+**IndexedDB on Node.js / Bun (two options):**
+
+- **Default**: In-memory polyfill (`fake-indexeddb`). No persistence across restarts; no extra config.
+- **Persistent (pure TypeScript)**: Set `SPACEKIT_IDB_BACKEND=wal` before calling `installPolyfills()`. Optional `SPACEKIT_IDB_PATH=/path/to/dir` (default: `.spacekit-idb`). Data is stored as a WAL file and replayed on startup; no SQLite or native addons.
+
+#### Platform detection
+
+```ts
+import { detectRuntime, installPolyfills } from "@spacekit/spacekit-js";
+
+const runtime = detectRuntime(); // "browser" | "node" | "bun"
+
+// Call once before using IndexedDB-backed storage on server runtimes
+await installPolyfills();
+```
+
+#### npm scripts
+
+| Script | Description |
+| --- | --- |
+| `npm run deploy:browser` | Build for browser (existing behavior) |
+| `npm run deploy:node` | Build for Node.js deployment |
+| `npm run deploy:bun` | Build for Bun deployment |
+| `npm run start:node` | Build + start Node.js JSON-RPC server |
+| `npm run start:node:dev` | Same, with dev mode (no signature checks) |
+| `npm run start:bun` | Build + start Bun JSON-RPC server |
+| `npm run start:bun:dev` | Same, with dev mode |
+| `npm run start:bun:native` | Uses `Bun.serve()` for best performance |
 
 ### Production readiness
 Core functionality is production-ready (WASM execution, JSON-RPC, browser demo, rollup bundling,
@@ -64,7 +112,7 @@ SpacekitVM-JS integrates with:
 
 ### How it compares
 - **vs EVM clients**: EVM is bytecode-only and server-first; Spacekit uses WASM with
-  a deterministic host ABI and can run fully in-browser.
+  a deterministic host ABI and runs in browsers, Node.js, and Bun.
 - **vs CosmWasm**: both use WASM smart contracts; `spacekitvm-js` adds an in-browser
   chain + JSON-RPC + extension bridge out of the box.
 - **vs NEAR**: NEAR’s Wasm runtime is network-first; Spacekit adds a local browser VM
@@ -83,7 +131,7 @@ SpacekitVM-JS integrates with:
 #### Comparison table (quick scan)
 | Feature | SpacekitVM-JS | EVM clients | CosmWasm |
 | --- | --- | --- | --- |
-| Browser-native VM | ✅ | ❌ | ❌ |
+| Multi-runtime (browser/Node/Bun) | ✅ | ❌ | ❌ |
 | WASM contracts | ✅ | ❌ | ✅ |
 | JSON-RPC + EIP-1193 | ✅ | ✅ | ❌ |
 | Rollup bundling | ✅ | Optional | Optional |
@@ -92,6 +140,8 @@ SpacekitVM-JS integrates with:
 ### Use cases
 - **Browser devnet**: fast local chain for dapp prototyping without running a full node.
 - **Offline demos**: run contracts and state in a browser/PWA with cached assets.
+- **Node.js server**: run the VM + JSON-RPC server headlessly for backend services and CI.
+- **Bun server**: high-performance server-side execution with `Bun.serve()` or `node:http`.
 - **Rollup client**: mine blocks, produce bundles, and export to `spacekit-storage-node`.
 - **Edge verification**: verify Merkle proofs and receipts client-side for light clients.
 - **Extension wallet**: EIP-1193 provider + signing for browser dapp flows.
@@ -114,10 +164,15 @@ npm run build
 
 ### Peer dependencies
 
-SpacekitJS expects React to be installed in the host app:
+SpacekitJS expects React to be installed in the host app (browser builds):
 ```bash
 npm install react react-dom
 ```
+
+### Server runtime dependencies
+
+- **Default (in-memory IndexedDB)**: `fake-indexeddb` is an optional dependency and is installed automatically. To install explicitly: `npm install fake-indexeddb`.
+- **Persistent IndexedDB (WAL)**: No extra dependency. Set `SPACEKIT_IDB_BACKEND=wal` (and optionally `SPACEKIT_IDB_PATH`) before `installPolyfills()` to use the built-in pure TypeScript WAL backend; data persists under the chosen path.
 
 ## Quick usage
 
@@ -146,6 +201,79 @@ avoid bloating the core VM:
 import { SkErc20Client, SkErc721Client } from "@spacekit/spacekit-js/contracts";
 ```
 
+## Running on Node.js
+
+Start the JSON-RPC server with a single command:
+
+```bash
+npm run start:node
+```
+
+Or run the entry point directly with options:
+
+```bash
+node dist/entry-node.js --port 8747 --host 127.0.0.1 --chain-id spacekit-local --dev-mode true
+```
+
+Environment variables are also supported:
+
+```bash
+SPACEKIT_PORT=8747 \
+SPACEKIT_HOST=0.0.0.0 \
+SPACEKIT_CHAIN_ID=spacekit-mainnet \
+SPACEKIT_API_KEY=my-secret-key \
+  node dist/entry-node.js
+```
+
+When used as a library in your own Node.js application, call `installPolyfills()`
+before using any IndexedDB-backed storage:
+
+```ts
+import { installPolyfills, SpacekitVm, createInMemoryStorage } from "@spacekit/spacekit-js";
+
+await installPolyfills();
+
+const vm = new SpacekitVm({
+  storage: createInMemoryStorage(),
+  chainId: "my-chain",
+  devMode: true,
+});
+```
+
+To persist VM state, blocks, and session across restarts, use the WAL IndexedDB backend (pure TypeScript, no SQLite):
+
+```bash
+SPACEKIT_IDB_BACKEND=wal SPACEKIT_IDB_PATH=./data node dist/entry-node.js
+```
+
+Or set the env vars in code before `installPolyfills()`.
+
+## Running on Bun
+
+Start the JSON-RPC server with Bun:
+
+```bash
+npm run start:bun
+```
+
+Or run directly:
+
+```bash
+bun dist/entry-bun.js --port 8747 --dev-mode true
+```
+
+For maximum performance, use Bun's native HTTP server (`Bun.serve()`) instead
+of the Node.js-compatible `node:http` server:
+
+```bash
+bun dist/entry-bun.js --use-bun-serve true
+# or
+npm run start:bun:native
+```
+
+The same environment variables as Node.js are supported, plus:
+- `SPACEKIT_USE_BUN_SERVE=true` to enable `Bun.serve()` mode
+
 ## WASM assets
 
 WASM modules (Kyber, SPHINCS+, Quantum Verkle) are built into `dist/wasm/` by the
@@ -161,8 +289,9 @@ WASM assets can be served from any public path. Override locations when
 initializing the VM (see Quantum Verkle section below).
 
 ### Prerequisites
-- Node.js 18+
-- Modern browser with WASM + IndexedDB support
+- **Browser**: Modern browser with WASM + IndexedDB support
+- **Node.js**: v18+ (WASM, `fetch`, and ES modules required)
+- **Bun**: v1.0+ (WASM and ES modules required)
 
 ### Build + typecheck
 ```bash
@@ -180,7 +309,7 @@ npm run typecheck
 - Contract artifacts are expected under `contracts/artifacts/*.wasm` when running the demo from the repo root.
 - The example `Uint8Array([1, 0, 0])` is contract-specific; see `src/examples/` for usage patterns.
 
-## Spacekit-JS Browser VM
+## Spacekit-JS VM
 
 ```ts
 import { SpacekitVm } from "@spacekit/spacekit-js";
@@ -303,6 +432,9 @@ Ed25519-derived and returned as hex (not ECDSA).
 
 ## JSON-RPC HTTP server
 
+The JSON-RPC server works on all runtimes. On Node.js and Bun, the entry point
+scripts start it automatically. You can also start it programmatically:
+
 ```ts
 import { startJsonRpcServer } from "@spacekit/spacekit-js";
 startJsonRpcServer(vm, { port: 8747, allowlist: ["127.0.0.1"], apiKey: "dev-key" });
@@ -310,6 +442,9 @@ startJsonRpcServer(vm, { port: 8747, allowlist: ["127.0.0.1"], apiKey: "dev-key"
 
 Supports JSON-RPC batching (array of requests) and CORS preflight.
 Rate limiting is enabled by default (120 req/min per IP); override via `rateLimit` option.
+
+On Bun, an alternative native server is available via the `--use-bun-serve` flag
+for better throughput (see [Running on Bun](#running-on-bun)).
 
 ## IndexedDB autosync + snapshots
 
@@ -413,10 +548,14 @@ npm run keys:rotate
 ## Ecosystem flow (diagram)
 ```mermaid
 flowchart LR
-  BrowserVM[spacekitvm-js] -->|mine + bundle| Sequencer[SpacekitSequencer]
+  BrowserVM["Browser (spacekit-js)"] -->|mine + bundle| Sequencer[SpacekitSequencer]
+  NodeVM["Node.js (spacekit-js)"] -->|mine + bundle| Sequencer
+  BunVM["Bun (spacekit-js)"] -->|mine + bundle| Sequencer
   Sequencer -->|export bundle| StorageNode[spacekit-storage-node]
   StorageNode -->|archive/sync| ComputeNode[spacekit-compute-node]
   BrowserVM -->|RPC/EIP-1193| Dapp[Dapp/Wallet]
+  NodeVM -->|JSON-RPC HTTP| Dapp
+  BunVM -->|JSON-RPC HTTP| Dapp
 ```
 
 ## Glossary
@@ -425,3 +564,7 @@ flowchart LR
 - **Merkle proof**: Inclusion proof for tx/receipt/state roots.
 - **EIP-1193**: Ethereum provider interface (`window.ethereum`).
 - **LWW**: Last-write-wins merge strategy for sync conflicts.
+- **Multi-runtime**: Ability to run the same codebase on browser, Node.js, and Bun.
+- **`fake-indexeddb`**: In-memory IndexedDB polyfill for server runtimes (default when not using WAL).
+- **WAL backend**: Built-in pure TypeScript IndexedDB implementation (append-only log + sorted store) for persistent storage on Node/Bun; enable with `SPACEKIT_IDB_BACKEND=wal`.
+- **`installPolyfills()`**: One-time setup call that installs the chosen IndexedDB implementation for server runtimes.

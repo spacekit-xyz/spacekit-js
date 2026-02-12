@@ -217,3 +217,11 @@ export type {
   SpaceTimeAgentProfile as StorageContractAgentProfile,
 } from "./spacetime/storage_contract_types.js";
 export { createSpaceTimeStorageContractCaller } from "./spacetime/storage_contract.js";
+
+// Platform utilities for multi-runtime support (browser, Node.js, Bun)
+export {
+  detectRuntime,
+  isServerRuntime,
+  installPolyfills,
+} from "./platform.js";
+export type { SpacekitRuntime } from "./platform.js";

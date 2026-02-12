@@ -1,4 +1,6 @@
 import { LLM_STATUS } from "../host.js";
+/** Default repetition penalty to reduce repetitive loops in small models. */
+const DEFAULT_REPETITION_PENALTY = 1.15;
 const DEFAULT_TRM_CONFIG = {
     maxSteps: 3,
     chainOfThought: true,
@@ -91,6 +93,7 @@ export class WebLlmAdapter {
             messages,
             temperature: temperature / 100,
             max_tokens: maxTokens,
+            repetition_penalty: DEFAULT_REPETITION_PENALTY,
         });
         this.cachedResponse = result.choices[0]?.message?.content || "";
         return this.cachedResponse;
@@ -140,6 +143,7 @@ export class WebLlmAdapter {
             ],
             temperature: currentTemp,
             max_tokens: maxTokens,
+            repetition_penalty: DEFAULT_REPETITION_PENALTY,
         });
         currentResponse = initialResult.choices[0]?.message?.content || "";
         step = 1;
@@ -154,6 +158,7 @@ export class WebLlmAdapter {
                 messages: [{ role: "user", content: refinePrompt }],
                 temperature: currentTemp,
                 max_tokens: maxTokens,
+                repetition_penalty: DEFAULT_REPETITION_PENALTY,
             });
             const refinedResponse = refineResult.choices[0]?.message?.content || "";
             // Check if refinement is substantially different (indicates improvement)
@@ -176,6 +181,7 @@ export class WebLlmAdapter {
                 messages: [{ role: "user", content: verifyPrompt }],
                 temperature: 0.1, // Low temperature for verification
                 max_tokens: maxTokens,
+                repetition_penalty: DEFAULT_REPETITION_PENALTY,
             });
             const verification = verifyResult.choices[0]?.message?.content || "";
             const similarity = this.computeSimilarity(currentResponse, verification);

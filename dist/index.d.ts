@@ -55,3 +55,5 @@ export { createVmContractCaller, JsonContractCodec, type ContractCallCodec, type
 export { SpaceTimeJsonCodec, type SpaceTimeMethod } from "./spacetime/codec.js";
 export type { SpaceTimeThread as StorageContractThread, SpaceTimePost as StorageContractPost, SpaceTimeAgentProfile as StorageContractAgentProfile, } from "./spacetime/storage_contract_types.js";
 export { createSpaceTimeStorageContractCaller } from "./spacetime/storage_contract.js";
+export { detectRuntime, isServerRuntime, installPolyfills, } from "./platform.js";
+export type { SpacekitRuntime } from "./platform.js";

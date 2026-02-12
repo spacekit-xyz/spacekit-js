@@ -34,3 +34,5 @@ export { ingestSpacekitTextMessage, ingestSpacekitEnvelope, } from "./spacetime/
 export { createVmContractCaller, JsonContractCodec, } from "./vm/contract_caller.js";
 export { SpaceTimeJsonCodec } from "./spacetime/codec.js";
 export { createSpaceTimeStorageContractCaller } from "./spacetime/storage_contract.js";
+// Platform utilities for multi-runtime support (browser, Node.js, Bun)
+export { detectRuntime, isServerRuntime, installPolyfills, } from "./platform.js";
