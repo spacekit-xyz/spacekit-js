@@ -63,27 +63,47 @@ export async function installPolyfills(): Promise<void> {
 
   // Install IndexedDB polyfill for Node.js / Bun
   if (typeof globalThis.indexedDB === "undefined") {
-    try {
-      // fake-indexeddb v6+ exports individual globals
-      const fakeIdb = await import("fake-indexeddb");
-      const g = globalThis as Record<string, unknown>;
-      g.indexedDB = fakeIdb.indexedDB;
-      g.IDBDatabase = fakeIdb.IDBDatabase;
-      g.IDBTransaction = fakeIdb.IDBTransaction;
-      g.IDBRequest = fakeIdb.IDBRequest;
-      g.IDBObjectStore = fakeIdb.IDBObjectStore;
-      g.IDBIndex = fakeIdb.IDBIndex;
-      g.IDBCursor = fakeIdb.IDBCursor;
-      g.IDBCursorWithValue = fakeIdb.IDBCursorWithValue;
-      g.IDBKeyRange = fakeIdb.IDBKeyRange;
-    } catch {
-      throw new Error(
-        `[spacekit] IndexedDB polyfill not found.\n` +
-          `Install it with:\n` +
-          `  npm install fake-indexeddb\n` +
-          `or:\n` +
-          `  bun add fake-indexeddb`
-      );
+    const useWal =
+      typeof process !== "undefined" &&
+      process.env?.SPACEKIT_IDB_BACKEND === "wal";
+
+    if (useWal) {
+      try {
+        const { createIDBFactory } = await import("./idb-node/index.js");
+        const basePath =
+          typeof process !== "undefined" && process.env?.SPACEKIT_IDB_PATH
+            ? process.env.SPACEKIT_IDB_PATH
+            : ".spacekit-idb";
+        (globalThis as Record<string, unknown>).indexedDB = createIDBFactory(basePath);
+      } catch (e) {
+        throw new Error(
+          `[spacekit] WAL IndexedDB backend failed: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+    } else {
+      try {
+        // fake-indexeddb v6+ exports individual globals
+        const fakeIdb = await import("fake-indexeddb");
+        const g = globalThis as Record<string, unknown>;
+        g.indexedDB = fakeIdb.indexedDB;
+        g.IDBDatabase = fakeIdb.IDBDatabase;
+        g.IDBTransaction = fakeIdb.IDBTransaction;
+        g.IDBRequest = fakeIdb.IDBRequest;
+        g.IDBObjectStore = fakeIdb.IDBObjectStore;
+        g.IDBIndex = fakeIdb.IDBIndex;
+        g.IDBCursor = fakeIdb.IDBCursor;
+        g.IDBCursorWithValue = fakeIdb.IDBCursorWithValue;
+        g.IDBKeyRange = fakeIdb.IDBKeyRange;
+      } catch {
+        throw new Error(
+          `[spacekit] IndexedDB polyfill not found.\n` +
+            `Install it with:\n` +
+            `  npm install fake-indexeddb\n` +
+            `or:\n` +
+            `  bun add fake-indexeddb\n` +
+            `Or use persistent WAL backend: SPACEKIT_IDB_BACKEND=wal`
+        );
+      }
     }
   }
 

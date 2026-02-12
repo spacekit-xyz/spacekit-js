@@ -51,13 +51,18 @@ SpaceKit‑JS runs on three deployment targets from the same codebase:
 | Runtime | Status | Entry point | IndexedDB |
 | --- | --- | --- | --- |
 | **Browser** | Stable | `import` from `@spacekit/spacekit-js` | Native |
-| **Node.js** (>=18) | Stable | `node dist/entry-node.js` | Polyfilled via `fake-indexeddb` |
-| **Bun** | Stable | `bun dist/entry-bun.js` | Polyfilled via `fake-indexeddb` |
+| **Node.js** (>=18) | Stable | `node dist/entry-node.js` | In-memory or persistent (see below) |
+| **Bun** | Stable | `bun dist/entry-bun.js` | In-memory or persistent (see below) |
 
 All three targets share the same TypeScript source, WASM contracts, and JSON-RPC interface.
-Server runtimes (Node.js / Bun) automatically install an IndexedDB polyfill so that
+Server runtimes (Node.js / Bun) use an IndexedDB implementation so that
 `IndexedDbStorageAdapter`, `IndexedDbBlockStore`, `SessionStore`, and all other
 IndexedDB-backed classes work without modification.
+
+**IndexedDB on Node.js / Bun (two options):**
+
+- **Default**: In-memory polyfill (`fake-indexeddb`). No persistence across restarts; no extra config.
+- **Persistent (pure TypeScript)**: Set `SPACEKIT_IDB_BACKEND=wal` before calling `installPolyfills()`. Optional `SPACEKIT_IDB_PATH=/path/to/dir` (default: `.spacekit-idb`). Data is stored as a WAL file and replayed on startup; no SQLite or native addons.
 
 #### Platform detection
 
@@ -166,11 +171,8 @@ npm install react react-dom
 
 ### Server runtime dependencies
 
-For Node.js and Bun, `fake-indexeddb` is included as an optional dependency
-and will be installed automatically. If you need to install it explicitly:
-```bash
-npm install fake-indexeddb
-```
+- **Default (in-memory IndexedDB)**: `fake-indexeddb` is an optional dependency and is installed automatically. To install explicitly: `npm install fake-indexeddb`.
+- **Persistent IndexedDB (WAL)**: No extra dependency. Set `SPACEKIT_IDB_BACKEND=wal` (and optionally `SPACEKIT_IDB_PATH`) before `installPolyfills()` to use the built-in pure TypeScript WAL backend; data persists under the chosen path.
 
 ## Quick usage
 
@@ -237,6 +239,14 @@ const vm = new SpacekitVm({
   devMode: true,
 });
 ```
+
+To persist VM state, blocks, and session across restarts, use the WAL IndexedDB backend (pure TypeScript, no SQLite):
+
+```bash
+SPACEKIT_IDB_BACKEND=wal SPACEKIT_IDB_PATH=./data node dist/entry-node.js
+```
+
+Or set the env vars in code before `installPolyfills()`.
 
 ## Running on Bun
 
@@ -555,5 +565,6 @@ flowchart LR
 - **EIP-1193**: Ethereum provider interface (`window.ethereum`).
 - **LWW**: Last-write-wins merge strategy for sync conflicts.
 - **Multi-runtime**: Ability to run the same codebase on browser, Node.js, and Bun.
-- **`fake-indexeddb`**: Spec-compliant IndexedDB polyfill for server runtimes.
-- **`installPolyfills()`**: One-time setup call that installs required globals for server runtimes.
+- **`fake-indexeddb`**: In-memory IndexedDB polyfill for server runtimes (default when not using WAL).
+- **WAL backend**: Built-in pure TypeScript IndexedDB implementation (append-only log + sorted store) for persistent storage on Node/Bun; enable with `SPACEKIT_IDB_BACKEND=wal`.
+- **`installPolyfills()`**: One-time setup call that installs the chosen IndexedDB implementation for server runtimes.
