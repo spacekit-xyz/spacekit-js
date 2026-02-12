@@ -11,6 +11,7 @@ export interface LlmChatEngine {
                 stream?: boolean;
                 temperature?: number;
                 max_tokens?: number;
+                repetition_penalty?: number;
             }) => Promise<{
                 choices: Array<{
                     message: {

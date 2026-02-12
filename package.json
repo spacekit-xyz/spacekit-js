@@ -1,12 +1,14 @@
 {
   "name": "@spacekit/spacekit-js",
   "version": "1.0.0",
-  "description": "Browser-native WASM VM for SpaceKit smart contracts with JSON-RPC, EIP-1193, and P2P sync",
+  "description": "Multi-runtime WASM VM for SpaceKit smart contracts with JSON-RPC, EIP-1193, and P2P sync (browser, Node.js, Bun)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
+      "bun": "./dist/index.js",
+      "node": "./dist/index.js",
       "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
@@ -21,7 +23,23 @@
     "./contracts": {
       "import": "./dist/contracts/index.js",
       "types": "./dist/contracts/index.d.ts"
+    },
+    "./platform": {
+      "import": "./dist/platform.js",
+      "types": "./dist/platform.d.ts"
+    },
+    "./entry-node": {
+      "node": "./dist/entry-node.js",
+      "default": "./dist/entry-node.js"
+    },
+    "./entry-bun": {
+      "bun": "./dist/entry-bun.js",
+      "default": "./dist/entry-bun.js"
     }
+  },
+  "bin": {
+    "spacekit-node": "./dist/entry-node.js",
+    "spacekit-bun": "./dist/entry-bun.js"
   },
   "files": [
     "dist",
@@ -59,6 +77,9 @@
     "buffer": "^6.0.3",
     "wasm-metering": "^0.2.1"
   },
+  "optionalDependencies": {
+    "fake-indexeddb": "^6.0.0"
+  },
   "scripts": {
     "build:quantum-verkle-wasm": "bash scripts/build-quantum-verkle-wasm.sh",
     "build": "tsc -p tsconfig.json && npm run copy:assets",
@@ -66,7 +87,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsc -p tsconfig.json && node --test dist/spacetime/*.test.js",
     "pq:wasm": "bash scripts/build-sphincs-wasm.sh",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "start:node": "npm run build && node dist/entry-node.js",
+    "start:node:dev": "npm run build && node dist/entry-node.js --dev-mode true",
+    "start:bun": "npm run build && bun dist/entry-bun.js",
+    "start:bun:dev": "npm run build && bun dist/entry-bun.js --dev-mode true",
+    "start:bun:native": "npm run build && bun dist/entry-bun.js --use-bun-serve true",
+    "deploy:browser": "npm run build",
+    "deploy:node": "npm run build && echo 'Run: node dist/entry-node.js'",
+    "deploy:bun": "npm run build && echo 'Run: bun dist/entry-bun.js'"
   },
   "peerDependencies": {
     "react": ">=18.0.0",

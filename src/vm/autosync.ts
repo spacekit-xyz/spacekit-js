@@ -16,8 +16,8 @@ export class VmAutoSync {
   private snapshotIntervalMs: number;
   private syncIntervalMs: number;
   private onSnapshot?: (snapshot: StateSnapshot) => void;
-  private snapshotTimer: number | null = null;
-  private syncTimer: number | null = null;
+  private snapshotTimer: ReturnType<typeof setInterval> | null = null;
+  private syncTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(vm: SpacekitVm, options: AutoSyncOptions) {
     this.vm = vm;
@@ -43,10 +43,10 @@ export class VmAutoSync {
     if (this.syncTimer !== null || this.snapshotTimer !== null) {
       return;
     }
-    this.syncTimer = window.setInterval(() => {
+    this.syncTimer = setInterval(() => {
       void this.storage.syncAll();
     }, this.syncIntervalMs);
-    this.snapshotTimer = window.setInterval(async () => {
+    this.snapshotTimer = setInterval(async () => {
       const snapshot = await this.vm.createSnapshot();
       const json = JSON.stringify(snapshot);
       this.storage.set(snapshotKey, new TextEncoder().encode(json));
@@ -59,11 +59,11 @@ export class VmAutoSync {
 
   stop() {
     if (this.syncTimer !== null) {
-      window.clearInterval(this.syncTimer);
+      clearInterval(this.syncTimer);
       this.syncTimer = null;
     }
     if (this.snapshotTimer !== null) {
-      window.clearInterval(this.snapshotTimer);
+      clearInterval(this.snapshotTimer);
       this.snapshotTimer = null;
     }
   }

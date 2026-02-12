@@ -5,6 +5,9 @@ export type LlmChatMessage = {
   content: string;
 };
 
+/** Default repetition penalty to reduce repetitive loops in small models. */
+const DEFAULT_REPETITION_PENALTY = 1.15;
+
 export interface LlmChatEngine {
   chat: {
     completions: {
@@ -13,6 +16,7 @@ export interface LlmChatEngine {
         stream?: boolean;
         temperature?: number;
         max_tokens?: number;
+        repetition_penalty?: number;
       }) => Promise<{
         choices: Array<{ message: { content: string } }>;
       }>;
@@ -145,6 +149,7 @@ export class WebLlmAdapter implements LlmAdapter {
       messages,
       temperature: temperature / 100,
       max_tokens: maxTokens,
+      repetition_penalty: DEFAULT_REPETITION_PENALTY,
     });
     this.cachedResponse = result.choices[0]?.message?.content || "";
     return this.cachedResponse;
@@ -205,6 +210,7 @@ export class WebLlmAdapter implements LlmAdapter {
       ],
       temperature: currentTemp,
       max_tokens: maxTokens,
+      repetition_penalty: DEFAULT_REPETITION_PENALTY,
     });
     currentResponse = initialResult.choices[0]?.message?.content || "";
     step = 1;
@@ -222,6 +228,7 @@ export class WebLlmAdapter implements LlmAdapter {
         messages: [{ role: "user", content: refinePrompt }],
         temperature: currentTemp,
         max_tokens: maxTokens,
+        repetition_penalty: DEFAULT_REPETITION_PENALTY,
       });
       
       const refinedResponse = refineResult.choices[0]?.message?.content || "";
@@ -250,6 +257,7 @@ export class WebLlmAdapter implements LlmAdapter {
         messages: [{ role: "user", content: verifyPrompt }],
         temperature: 0.1, // Low temperature for verification
         max_tokens: maxTokens,
+        repetition_penalty: DEFAULT_REPETITION_PENALTY,
       });
       
       const verification = verifyResult.choices[0]?.message?.content || "";
