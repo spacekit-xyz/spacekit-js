@@ -17,6 +17,7 @@
 
 import { installPolyfills, detectRuntime } from "./platform.js";
 import { SpacekitVm } from "./vm/spacekitvm.js";
+import { getGenesisPresetForNetwork } from "./vm/genesis.js";
 import { createInMemoryStorage } from "./storage.js";
 import { startJsonRpcServer } from "./vm/http_rpc_server.js";
 
@@ -60,9 +61,11 @@ async function main(): Promise<void> {
   console.log(`[spacekit] Initializing VM (chain: ${chainId}, devMode: ${devMode})...`);
 
   const storage = createInMemoryStorage();
+  const genesisConfig = getGenesisPresetForNetwork(chainId) ?? undefined;
   const vm = new SpacekitVm({
     storage,
     chainId,
+    genesisConfig,
     devMode,
   });
 

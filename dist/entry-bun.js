@@ -19,6 +19,7 @@
  */
 import { installPolyfills, detectRuntime } from "./platform.js";
 import { SpacekitVm } from "./vm/spacekitvm.js";
+import { getGenesisPresetForNetwork } from "./vm/genesis.js";
 import { createInMemoryStorage } from "./storage.js";
 import { startJsonRpcServer } from "./vm/http_rpc_server.js";
 import { createJsonRpcHandler } from "./vm/json_rpc.js";
@@ -107,9 +108,11 @@ async function main() {
     const useBunServe = (args["use-bun-serve"] ?? process.env.SPACEKIT_USE_BUN_SERVE) === "true";
     console.log(`[spacekit] Initializing VM (chain: ${chainId}, devMode: ${devMode})...`);
     const storage = createInMemoryStorage();
+    const genesisConfig = getGenesisPresetForNetwork(chainId) ?? undefined;
     const vm = new SpacekitVm({
         storage,
         chainId,
+        genesisConfig,
         devMode,
     });
     if (useBunServe && typeof Bun !== "undefined") {

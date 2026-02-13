@@ -26,6 +26,44 @@ export const DEFAULT_GENESIS_CONFIG = {
     initialDids: [],
 };
 /**
+ * Decimal places and symbols for common networks so the VM can match L1 conventions
+ * when the browser-VM is "programmed for" a given chain (e.g. display, fees, ERC-20 decimals).
+ * Used by getGenesisPresetForNetwork() and compatible with proof-bridge target chains.
+ */
+export const NETWORK_DECIMAL_PRESETS = {
+    bitcoin: { decimals: 8, symbol: "BTC", name: "Bitcoin" },
+    btc: { decimals: 8, symbol: "BTC", name: "Bitcoin" },
+    ethereum: { decimals: 18, symbol: "ETH", name: "Ethereum" },
+    eth: { decimals: 18, symbol: "ETH", name: "Ethereum" },
+    solana: { decimals: 9, symbol: "SOL", name: "Solana" },
+    sol: { decimals: 9, symbol: "SOL", name: "Solana" },
+    astra: { decimals: 18, symbol: "ASTRA", name: "ASTRA Native Token" },
+    "spacekitvm-local": { decimals: 18, symbol: "ASTRA", name: "ASTRA Native Token" },
+    "spacekit-local": { decimals: 18, symbol: "ASTRA", name: "ASTRA Native Token" },
+};
+/**
+ * Return a genesis config that uses the same decimal system (and symbol) as the given network.
+ * Use when the VM should behave like a given chain (BTC=8, ETH/SOL/ASTRA=18/9/18). Returns null
+ * for unknown networks so the caller can fall back to DEFAULT_GENESIS_CONFIG.
+ */
+export function getGenesisPresetForNetwork(network) {
+    const key = network.toLowerCase().replace(/^spacekit-/, "");
+    const preset = NETWORK_DECIMAL_PRESETS[key] ?? NETWORK_DECIMAL_PRESETS[network.toLowerCase()];
+    if (!preset)
+        return null;
+    return {
+        ...DEFAULT_GENESIS_CONFIG,
+        chainId: network,
+        timestamp: Date.now(),
+        nativeCurrency: {
+            ...DEFAULT_GENESIS_CONFIG.nativeCurrency,
+            decimals: preset.decimals,
+            symbol: preset.symbol,
+            name: preset.name,
+        },
+    };
+}
+/**
  * Get canonical string representation of genesis config for hashing.
  */
 export function getGenesisCanonical(config) {

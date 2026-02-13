@@ -73,6 +73,8 @@ export {
 // Genesis and DID resolution utilities
 export {
   DEFAULT_GENESIS_CONFIG,
+  NETWORK_DECIMAL_PRESETS,
+  getGenesisPresetForNetwork,
   computeGenesisHash,
   computeGenesisHashSync,
   getGenesisCanonical,
@@ -103,6 +105,13 @@ export type {
   ProofBridgeSubmitResult,
   ProofBridgeChainConfig,
   ProofBridgeConfig,
+  AdapterRegistry,
+} from "./vm/proof_bridge.js";
+export {
+  loadProofBridgeConfig,
+  createAdaptersFromConfig,
+  substituteEnvInChainConfig,
+  setDefaultAdapterRegistry,
 } from "./vm/proof_bridge.js";
 export type { RpcServerOptions } from "./vm/http_rpc_server.js";
 export { startJsonRpcServer } from "./vm/http_rpc_server.js";

@@ -16,6 +16,7 @@
  */
 import { installPolyfills, detectRuntime } from "./platform.js";
 import { SpacekitVm } from "./vm/spacekitvm.js";
+import { getGenesisPresetForNetwork } from "./vm/genesis.js";
 import { createInMemoryStorage } from "./storage.js";
 import { startJsonRpcServer } from "./vm/http_rpc_server.js";
 /* ───────────────────── CLI arg parsing ───────────────────── */
@@ -52,9 +53,11 @@ async function main() {
     const devMode = (args["dev-mode"] ?? process.env.SPACEKIT_DEV_MODE) === "true";
     console.log(`[spacekit] Initializing VM (chain: ${chainId}, devMode: ${devMode})...`);
     const storage = createInMemoryStorage();
+    const genesisConfig = getGenesisPresetForNetwork(chainId) ?? undefined;
     const vm = new SpacekitVm({
         storage,
         chainId,
+        genesisConfig,
         devMode,
     });
     const server = startJsonRpcServer(vm, {

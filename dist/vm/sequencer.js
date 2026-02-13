@@ -7,11 +7,13 @@ export class SpacekitSequencer {
     vm;
     maxBlocksPerBundle;
     onBundle;
+    proofBridgeAdapters;
     lastSealedIndex = 0;
     constructor(vm, options = {}) {
         this.vm = vm;
         this.maxBlocksPerBundle = options.maxBlocksPerBundle ?? 10;
         this.onBundle = options.onBundle;
+        this.proofBridgeAdapters = options.proofBridgeAdapters;
     }
     async mineAndBundle() {
         const block = await this.vm.mineBlock();
@@ -70,6 +72,16 @@ export class SpacekitSequencer {
         if (this.onBundle) {
             this.onBundle(bundle);
         }
+        for (const adapter of this.proofBridgeAdapters ?? []) {
+            if (!adapter.isReady())
+                continue;
+            try {
+                await adapter.submit({ kind: "bundle", bundle });
+            }
+            catch (_e) {
+                // Log and continue; caller can add retry or logging
+            }
+        }
         return bundle;
     }
     async exportBundle(bundle, storage, collection = "spacekitvm_rollups") {
@@ -93,6 +105,16 @@ export class SpacekitSequencer {
         };
     }
     async exportSignedBundle(signedBundle, storage, collection = "spacekitvm_rollups") {
+        for (const adapter of this.proofBridgeAdapters ?? []) {
+            if (!adapter.isReady())
+                continue;
+            try {
+                await adapter.submit({ kind: "signed_bundle", signed: signedBundle });
+            }
+            catch (_e) {
+                // Log and continue
+            }
+        }
         return storage.putDocument(collection, signedBundle.bundleId, {
             bundle: signedBundle,
             exported_at: Date.now(),

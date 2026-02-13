@@ -39,6 +39,22 @@ export interface GenesisConfig {
 }
 export declare const DEFAULT_GENESIS_CONFIG: GenesisConfig;
 /**
+ * Decimal places and symbols for common networks so the VM can match L1 conventions
+ * when the browser-VM is "programmed for" a given chain (e.g. display, fees, ERC-20 decimals).
+ * Used by getGenesisPresetForNetwork() and compatible with proof-bridge target chains.
+ */
+export declare const NETWORK_DECIMAL_PRESETS: Record<string, {
+    decimals: number;
+    symbol: string;
+    name: string;
+}>;
+/**
+ * Return a genesis config that uses the same decimal system (and symbol) as the given network.
+ * Use when the VM should behave like a given chain (BTC=8, ETH/SOL/ASTRA=18/9/18). Returns null
+ * for unknown networks so the caller can fall back to DEFAULT_GENESIS_CONFIG.
+ */
+export declare function getGenesisPresetForNetwork(network: string): GenesisConfig | null;
+/**
  * Get canonical string representation of genesis config for hashing.
  */
 export declare function getGenesisCanonical(config: GenesisConfig): string;

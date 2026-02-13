@@ -24,6 +24,7 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 ### Contents
 - [What is spacekit-js?](#what-is-spacekit-js)
 - [Multi-runtime support](#multi-runtime-support)
+- [Architecture diagrams](#architecture-diagrams)
 - [Production readiness](#production-readiness)
 - [Developer docs](#developer-docs)
 - [How it compares](#how-it-compares)
@@ -41,6 +42,7 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 - [JSON-RPC HTTP server](#json-rpc-http-server)
 - [IndexedDB autosync + snapshots](#indexeddb-autosync--snapshots)
 - [Rollup export](#rollup-export-to-spacekit-storage-node)
+- [Network decimals (VM chain presets)](#network-decimals-vm-chain-presets)
 - [Proof bridge (other chains)](#proof-bridge-other-chains)
 - [Browser extension (MV3)](#browser-extension-mv3-skeleton)
 - [Glossary](#glossary)
@@ -88,6 +90,66 @@ await installPolyfills();
 | `npm run start:bun` | Build + start Bun JSON-RPC server |
 | `npm run start:bun:dev` | Same, with dev mode |
 | `npm run start:bun:native` | Uses `Bun.serve()` for best performance |
+
+### Architecture diagrams
+
+**Multi-runtime VM (Browser / Node.js / Bun)**
+
+```mermaid
+flowchart LR
+  subgraph Runtimes[" "]
+    Browser["Browser"]
+    Node["Node.js"]
+    Bun["Bun"]
+  end
+  subgraph VM["SpaceKit-JS (single codebase)"]
+    SpacekitVM["SpacekitVM"]
+    WASM["WASM contracts"]
+    RPC["JSON-RPC / EIP-1193"]
+    Storage["IndexedDB or polyfill"]
+  end
+  Browser --> SpacekitVM
+  Node --> SpacekitVM
+  Bun --> SpacekitVM
+  SpacekitVM --> WASM
+  SpacekitVM --> RPC
+  SpacekitVM --> Storage
+```
+
+**Proof bridge architecture**
+
+```mermaid
+flowchart TB
+  subgraph Source["Proof source"]
+    VM["SpacekitVM"]
+    Sequencer["SpacekitSequencer"]
+    VM -->|mineBlock, state roots| Sequencer
+    Sequencer -->|flushBundle / exportSignedBundle| Payloads["Bundles, state roots, proofs"]
+  end
+  Config["Config (inline or URL)"] --> Loader["loadProofBridgeConfig\ncreateAdaptersFromConfig"]
+  Loader --> Adapters
+  subgraph Adapters["ProofBridgeAdapters"]
+    ETH["Ethereum adapter"]
+    BTC["Bitcoin adapter"]
+    SOL["Solana adapter"]
+  end
+  Payloads --> ETH
+  Payloads --> BTC
+  Payloads --> SOL
+  ETH --> L1E["L1 contract / RPC"]
+  BTC --> L1B["Indexer / OP_RETURN"]
+  SOL --> L1S["Solana program"]
+  subgraph Optional["Optional: out-of-process"]
+    Service["Proof Bridge Service"]
+    StorageNode["Storage node"]
+    RPC["VM JSON-RPC"]
+    Service -->|poll| StorageNode
+    Service -->|poll| RPC
+    Service --> Loader
+    StorageNode -.->|bundles| Payloads
+    RPC -.->|state roots| Payloads
+  end
+```
 
 ### Production readiness
 Core functionality is production-ready (WASM execution, JSON-RPC, browser demo, rollup bundling,
@@ -490,9 +552,13 @@ const bundle = await sequencer.flushBundle();
 await sequencer.exportBundle(bundle, storageNode);
 ```
 
+### Network decimals (VM chain presets)
+
+When the VM is used for a specific network (e.g. browser-VM “programmed for” BTC, ETH, SOL, ASTRA), **decimal places and symbol** are set via **genesis config** in `src/vm/genesis.ts`. Use `getGenesisPresetForNetwork(chainId)` or `NETWORK_DECIMAL_PRESETS` to get a `GenesisConfig` that matches each chain: **Bitcoin 8**, **Ethereum 18**, **Solana 9**, **ASTRA 18**. Pass it as `genesisConfig` when creating the VM. The Node/Bun entry points apply this automatically when `SPACEKIT_CHAIN_ID` is `bitcoin`, `ethereum`, `solana`, `astra`, or `spacekit-local`. This is independent of and compatible with the proof bridge (same target chains).
+
 ### Proof bridge (other chains)
 
-The VM and sequencer can push state roots, bundles, and proofs to **external chains** (Ethereum, Bitcoin, Solana) via pluggable adapters. You pass `proofBridgeAdapters` into `SpacekitSequencer`; on each `flushBundle()` and `exportSignedBundle()` the sequencer submits the payload to each ready adapter. Config can be loaded from a URL (e.g. network config) or inline. See **[docs/PROOF_BRIDGE_DESIGN.md](docs/PROOF_BRIDGE_DESIGN.md)** for the adapter interface, config shape, and per-chain notes. Types: `ProofBridgeAdapter`, `ProofBridgePayload`, `ProofBridgeConfig`.
+The VM and sequencer can push state roots, bundles, and proofs to **external chains** (Ethereum, Bitcoin, Solana) via pluggable adapters. You pass `proofBridgeAdapters` into `SpacekitSequencer`; on each `flushBundle()` and `exportSignedBundle()` the sequencer submits the payload to each ready adapter. Config can be loaded from a URL (e.g. network config) or inline via `loadProofBridgeConfig` and `createAdaptersFromConfig`; import `@spacekit/spacekit-js/adapters` to register the built-in Ethereum, Bitcoin, and Solana adapters. Optional out-of-process daemon: set `PROOF_BRIDGE_CONFIG_URL` or `PROOF_BRIDGE_CONFIG_PATH`, `PROOF_BRIDGE_SOURCE=storage|rpc`, and storage/RPC env vars, then run `npm run proof-bridge-service`. See **[docs/PROOF_BRIDGE_DESIGN.md](docs/PROOF_BRIDGE_DESIGN.md)** for the adapter interface, config shape, and per-chain notes. **[docs/examples/PROOF_BRIDGE_EXAMPLES.md](docs/examples/PROOF_BRIDGE_EXAMPLES.md)** has example config JSON, env file, and code. Types: `ProofBridgeAdapter`, `ProofBridgePayload`, `ProofBridgeConfig`.
 
 ## Rollup key policy (compute-node)
 The compute-node validator can enforce key expiry + revocation using a JSON policy file.

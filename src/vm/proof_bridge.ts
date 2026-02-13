@@ -63,3 +63,77 @@ export interface ProofBridgeConfig {
   chains?: Record<string, ProofBridgeChainConfig>;
   refreshIntervalMs?: number;
 }
+
+/** Resolve env var references in chain config (e.g. privateKeyHex: "SPACEKIT_ETH_SIGNER_KEY"). */
+export function substituteEnvInChainConfig(
+  chainConfig: ProofBridgeChainConfig
+): ProofBridgeChainConfig {
+  const envVarPattern = /^[A-Z_][A-Z0-9_]*$/;
+  const resolve = (v: string | undefined): string | undefined => {
+    if (v == null) return v;
+    if (typeof v !== "string") return v;
+    if (envVarPattern.test(v) && typeof process !== "undefined" && process.env?.[v] != null) {
+      return process.env[v];
+    }
+    return v;
+  };
+  return {
+    ...chainConfig,
+    privateKeyHex: resolve(chainConfig.privateKeyHex) ?? chainConfig.privateKeyHex,
+  };
+}
+
+/** Load chain configs from ProofBridgeConfig (inline or fetch from configUrl). Returns enabled chains only. */
+export async function loadProofBridgeConfig(
+  config: ProofBridgeConfig
+): Promise<ProofBridgeChainConfig[]> {
+  let raw: Record<string, ProofBridgeChainConfig> | undefined;
+  if (config.source === "inline") {
+    raw = config.chains;
+  } else if (config.source === "url" && config.configUrl) {
+    const res = await fetch(config.configUrl);
+    if (!res.ok) throw new Error(`Proof bridge config fetch failed: ${res.status} ${res.statusText}`);
+    const body = await res.json();
+    raw = body.chains ?? body.bridgeConfig?.chains ?? body;
+  } else {
+    raw = undefined;
+  }
+  if (!raw || typeof raw !== "object") return [];
+  const list = Object.values(raw).filter((c): c is ProofBridgeChainConfig => c?.enabled === true);
+  return list.map(substituteEnvInChainConfig);
+}
+
+/** Create adapters from loaded chain configs. Requires optional adapter packages or in-repo adapters. */
+export async function createAdaptersFromConfig(
+  chainConfigs: ProofBridgeChainConfig[],
+  options?: { adapterRegistry?: AdapterRegistry }
+): Promise<ProofBridgeAdapter[]> {
+  const registry = options?.adapterRegistry ?? getDefaultAdapterRegistry();
+  const adapters: ProofBridgeAdapter[] = [];
+  for (const cc of chainConfigs) {
+    const adapter = await registry.create(cc);
+    if (adapter) adapters.push(adapter);
+  }
+  return adapters;
+}
+
+/** Registry that creates an adapter from chain config. Plug in custom or optional adapters. */
+export type AdapterRegistry = {
+  create(config: ProofBridgeChainConfig): Promise<ProofBridgeAdapter | null>;
+};
+
+let defaultRegistry: AdapterRegistry | null = null;
+
+/** Set the default adapter registry (used by createAdaptersFromConfig). Used by adapters/index to register Ethereum/Bitcoin/Solana. */
+export function setDefaultAdapterRegistry(registry: AdapterRegistry): void {
+  defaultRegistry = registry;
+}
+
+function getDefaultAdapterRegistry(): AdapterRegistry {
+  if (defaultRegistry) return defaultRegistry;
+  return {
+    async create(_config: ProofBridgeChainConfig): Promise<ProofBridgeAdapter | null> {
+      return null;
+    },
+  };
+}

@@ -1,5 +1,6 @@
 import { SpacekitVm } from "./spacekitvm.js";
 import type { StorageNodeAdapter } from "../storage.js";
+import type { ProofBridgeAdapter } from "./proof_bridge.js";
 export interface RollupBundle {
     bundleId: string;
     fromHeight: number;
@@ -31,6 +32,8 @@ export interface SignedRollupBundle extends RollupBundle {
 export interface SequencerOptions {
     maxBlocksPerBundle?: number;
     onBundle?: (bundle: RollupBundle) => void;
+    /** Optional adapters to submit bundles/proofs to other chains (Ethereum, Bitcoin, Solana). */
+    proofBridgeAdapters?: ProofBridgeAdapter[];
 }
 export interface BundleSigningOptions {
     privateKeyHex: string;
@@ -39,6 +42,7 @@ export declare class SpacekitSequencer {
     private vm;
     private maxBlocksPerBundle;
     private onBundle?;
+    private proofBridgeAdapters?;
     private lastSealedIndex;
     constructor(vm: SpacekitVm, options?: SequencerOptions);
     mineAndBundle(): Promise<RollupBundle | null>;

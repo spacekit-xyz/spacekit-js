@@ -8,9 +8,10 @@ export { loadQuantumVerkleWasm } from "./quantum_verkle.js";
 export { verifyQuantumVerkleProof } from "./vm/quantum_verkle.js";
 export { verifyEd25519, signEd25519, generateEd25519Keypair, createSignatureVerifier, createTransactionMessage, hashTransactionMessage, signTransaction, verifyTransactionSignature, } from "./vm/signatures.js";
 // Genesis and DID resolution utilities
-export { DEFAULT_GENESIS_CONFIG, computeGenesisHash, computeGenesisHashSync, getGenesisCanonical, isProtectedKey, PROTECTED_PREFIXES, createDidDocument, didDocumentKey, createDidResolver, } from "./vm/genesis.js";
+export { DEFAULT_GENESIS_CONFIG, NETWORK_DECIMAL_PRESETS, getGenesisPresetForNetwork, computeGenesisHash, computeGenesisHashSync, getGenesisCanonical, isProtectedKey, PROTECTED_PREFIXES, createDidDocument, didDocumentKey, createDidResolver, } from "./vm/genesis.js";
 export { createJsonRpcHandler } from "./vm/json_rpc.js";
 export { SpacekitSequencer } from "./vm/sequencer.js";
+export { loadProofBridgeConfig, createAdaptersFromConfig, substituteEnvInChainConfig, setDefaultAdapterRegistry, } from "./vm/proof_bridge.js";
 export { startJsonRpcServer } from "./vm/http_rpc_server.js";
 export { VmAutoSync } from "./vm/autosync.js";
 export { HOST_ABI_VERSION, HOST_IMPORT_MODULES } from "./vm/abi.js";
