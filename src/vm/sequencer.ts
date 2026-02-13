@@ -2,6 +2,7 @@ import { SpacekitVm } from "./spacekitvm.js";
 import { sha256Hex, hashString } from "./hash.js";
 import type { StorageNodeAdapter } from "../storage.js";
 import { bytesToHex, hexToBytes } from "../storage.js";
+import type { ProofBridgeAdapter } from "./proof_bridge.js";
 
 export interface RollupBundle {
   bundleId: string;
@@ -37,6 +38,8 @@ export interface SignedRollupBundle extends RollupBundle {
 export interface SequencerOptions {
   maxBlocksPerBundle?: number;
   onBundle?: (bundle: RollupBundle) => void;
+  /** Optional adapters to submit bundles/proofs to other chains (Ethereum, Bitcoin, Solana). */
+  proofBridgeAdapters?: ProofBridgeAdapter[];
 }
 
 export interface BundleSigningOptions {
@@ -51,12 +54,14 @@ export class SpacekitSequencer {
   private vm: SpacekitVm;
   private maxBlocksPerBundle: number;
   private onBundle?: (bundle: RollupBundle) => void;
+  private proofBridgeAdapters?: ProofBridgeAdapter[];
   private lastSealedIndex = 0;
 
   constructor(vm: SpacekitVm, options: SequencerOptions = {}) {
     this.vm = vm;
     this.maxBlocksPerBundle = options.maxBlocksPerBundle ?? 10;
     this.onBundle = options.onBundle;
+    this.proofBridgeAdapters = options.proofBridgeAdapters;
   }
 
   async mineAndBundle(): Promise<RollupBundle | null> {
@@ -120,6 +125,14 @@ export class SpacekitSequencer {
     if (this.onBundle) {
       this.onBundle(bundle);
     }
+    for (const adapter of this.proofBridgeAdapters ?? []) {
+      if (!adapter.isReady()) continue;
+      try {
+        await adapter.submit({ kind: "bundle", bundle });
+      } catch (_e) {
+        // Log and continue; caller can add retry or logging
+      }
+    }
     return bundle;
   }
 
@@ -150,6 +163,14 @@ export class SpacekitSequencer {
     storage: StorageNodeAdapter,
     collection = "spacekitvm_rollups"
   ) {
+    for (const adapter of this.proofBridgeAdapters ?? []) {
+      if (!adapter.isReady()) continue;
+      try {
+        await adapter.submit({ kind: "signed_bundle", signed: signedBundle });
+      } catch (_e) {
+        // Log and continue
+      }
+    }
     return storage.putDocument(collection, signedBundle.bundleId, {
       bundle: signedBundle,
       exported_at: Date.now(),
