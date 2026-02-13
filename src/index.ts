@@ -97,6 +97,13 @@ export type {
   BundleSigningOptions,
 } from "./vm/sequencer.js";
 export { SpacekitSequencer } from "./vm/sequencer.js";
+export type {
+  ProofBridgePayload,
+  ProofBridgeAdapter,
+  ProofBridgeSubmitResult,
+  ProofBridgeChainConfig,
+  ProofBridgeConfig,
+} from "./vm/proof_bridge.js";
 export type { RpcServerOptions } from "./vm/http_rpc_server.js";
 export { startJsonRpcServer } from "./vm/http_rpc_server.js";
 export type { AutoSyncOptions } from "./vm/autosync.js";

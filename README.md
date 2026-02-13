@@ -41,6 +41,7 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 - [JSON-RPC HTTP server](#json-rpc-http-server)
 - [IndexedDB autosync + snapshots](#indexeddb-autosync--snapshots)
 - [Rollup export](#rollup-export-to-spacekit-storage-node)
+- [Proof bridge (other chains)](#proof-bridge-other-chains)
 - [Browser extension (MV3)](#browser-extension-mv3-skeleton)
 - [Glossary](#glossary)
 
@@ -488,6 +489,10 @@ const sequencer = new SpacekitSequencer(vm);
 const bundle = await sequencer.flushBundle();
 await sequencer.exportBundle(bundle, storageNode);
 ```
+
+### Proof bridge (other chains)
+
+The VM and sequencer can push state roots, bundles, and proofs to **external chains** (Ethereum, Bitcoin, Solana) via pluggable adapters. You pass `proofBridgeAdapters` into `SpacekitSequencer`; on each `flushBundle()` and `exportSignedBundle()` the sequencer submits the payload to each ready adapter. Config can be loaded from a URL (e.g. network config) or inline. See **[docs/PROOF_BRIDGE_DESIGN.md](docs/PROOF_BRIDGE_DESIGN.md)** for the adapter interface, config shape, and per-chain notes. Types: `ProofBridgeAdapter`, `ProofBridgePayload`, `ProofBridgeConfig`.
 
 ## Rollup key policy (compute-node)
 The compute-node validator can enforce key expiry + revocation using a JSON policy file.
