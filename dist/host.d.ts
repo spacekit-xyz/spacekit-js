@@ -53,10 +53,11 @@ export interface CapturedLlmRequest {
  * The infer method is synchronous because WASM host functions cannot be async.
  * Implementations should pre-load models and cache responses.
  *
- * Two-phase execution pattern:
- * 1. Contract runs in "capture mode" - llm_call records prompt but returns placeholder
- * 2. Host runs async inference with captured prompt
- * 3. Contract runs again - llm_call returns cached result
+ * Two-phase execution pattern (when using setCaptureMode):
+ * 1. Contract runs in "capture mode" – llm_call records the prompt and returns a
+ *    placeholder response (e.g. empty string) to the contract.
+ * 2. Host runs async inference with the captured prompt.
+ * 3. Contract runs again – llm_call returns the cached inference result.
  */
 export interface LlmAdapter {
     /**

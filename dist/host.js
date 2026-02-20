@@ -1,5 +1,6 @@
 import { MemoryView, LinearMemoryAllocator } from "./memory.js";
 import { createInMemoryStorage } from "./storage.js";
+import { microgpt_forward } from "./llm/microgpt_forward.js";
 /**
  * LLM status codes used by host functions
  */
@@ -383,10 +384,24 @@ export function createImports(ctx) {
     const llmStatus = () => {
         return ctx.llm.getStatus();
     };
+    /**
+     * Micro-GPT forward primitive: write logits to out_ptr (VOCAB_SIZE f32s).
+     * Signature: microgpt_forward(token_id: u32, pos_id: u32, out_ptr: u32) -> void
+     */
+    const microgptForward = (tokenId, posId, outPtr) => {
+        const logits = microgpt_forward(tokenId, posId);
+        const bytes = new Uint8Array(logits.buffer, logits.byteOffset, logits.byteLength);
+        ctx.writeBytes(outPtr, bytes);
+    };
     const useGas = (amount) => {
         ctx.consumeGas(amount);
     };
+    // AssemblyScript-compiled WASM may import env.abort (e.g. for assertions). Provide a stub.
+    const envAbort = (message, fileName, line, column) => {
+        console.warn("[SpaceKit] contract abort", { message, fileName, line, column });
+    };
     const baseEnv = {
+        abort: envAbort,
         storage_read: storageRead,
         storage_write: storageWrite,
         storage_save: storageWrite,
@@ -473,6 +488,9 @@ export function createImports(ctx) {
         spacekit_llm: {
             llm_inference: llmInference,
             llm_status: llmStatus,
+        },
+        spacekit_microgpt: {
+            microgpt_forward: microgptForward,
         },
     };
 }

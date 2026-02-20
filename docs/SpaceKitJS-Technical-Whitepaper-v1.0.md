@@ -145,7 +145,57 @@ SpaceKitJS exposes `spacekit_llm` host functions for contract‑bound inference.
 The current async/sync bridge uses precompute caching to safely provide LLM results
 to synchronous WASM calls. LLM integration is optional and can be disabled at build time.
 
-Future options:
+### 9.1 SpaceKit Agent Contract
+The reference agent contract (`spacekit-agent`, in `spacekit-standard-library`) uses
+`llm_call(prompt, temperature, max_tokens, max_response_len)` for six operations:
+
+| Op | Name        | Description |
+|----|-------------|-------------|
+| 1  | CHAT        | User message + optional conversation context → Kit response |
+| 2  | ANALYZE     | Content → JSON safety/sentiment |
+| 3  | SUMMARIZE   | Content → 2–3 sentence summary |
+| 4  | CODE_REVIEW | Code → concise review (bugs, security, improvements) |
+| 5  | CLASSIFY    | Content + categories → single category label |
+| 6  | STATUS      | No LLM; returns host LLM status (not_loaded / ready / loading) |
+
+The UI sends conversation context for CHAT so the model can answer in context; the contract
+instructs the model to answer **only** the latest user message.
+
+### 9.2 Internal Prompts (Contract-Side)
+Prompts are defined inside the WASM contract so behaviour is auditable and consistent
+across UIs. Temperature and max tokens are set per operation.
+
+**CHAT (Kit identity and rules)**  
+System prompt (abridged):
+
+- Kit is the SpaceKit on-chain developer agent running in a WASM contract on the SpaceKit VM.
+- Recommend **SpaceKit only**: WASM contracts, SpaceKit VM, SKCL, spacekit.xyz, and the SpaceKit ecosystem.
+- Do **not** recommend Ethereum, Solidity, EVM, or other blockchains unless the user explicitly asks.
+- For development: direct users to SpaceKit (Rust/WASM, spacekit-standard-library, docs).
+- Keep answers clear and concise; do not repeat the same phrase.
+- **Important:** The conversation payload may include previous turns. Answer **only** the last user message; ignore earlier User/Kit lines.
+
+The contract then appends the conversation (including “Current question (answer only this):” when the UI sends context) and “Kit:” for completion. Parameters: temperature 40 (0.4), max 1024 tokens.
+
+**ANALYZE**  
+“Analyze the following content for safety and sentiment. Respond with JSON: {\"safe\": true/false, \"sentiment\": \"positive/negative/neutral\", \"reason\": \"brief explanation\"}”  
+Temperature 30, max 128 tokens.
+
+**SUMMARIZE**  
+“Summarize the following content in 2-3 sentences.”  
+Temperature 50, max 200 tokens.
+
+**CODE_REVIEW**  
+“Review the following code for bugs, security issues, and improvements. Be concise and specific.” (Content in fenced block.)  
+Temperature 30, max 512 tokens.
+
+**CLASSIFY**  
+“Classify the following content into one of these categories: {categories}. Content: {content}. Respond with just the category name.”  
+Temperature 20, max 50 tokens.
+
+These prompts are the single source of truth in the contract; the whitepaper summarizes them for transparency and audit.
+
+### 9.3 Future options
 - WASM Asyncify
 - Oracle pattern for inference requests
 

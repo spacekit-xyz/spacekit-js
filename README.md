@@ -45,6 +45,7 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 - [Network decimals (VM chain presets)](#network-decimals-vm-chain-presets)
 - [Proof bridge (other chains)](#proof-bridge-other-chains)
 - [Browser extension (MV3)](#browser-extension-mv3-skeleton)
+- [Kit Protocol integration (kit.space)](#kit-protocol-integration-kitspace)
 - [Glossary](#glossary)
 
 ### Multi-runtime support
@@ -615,6 +616,157 @@ npm run policy:revoke
 npm run keys:generate
 npm run keys:rotate
 ```
+
+## Kit Protocol integration (kit.space)
+
+`kit-protocol` is a WASM smart contract that acts as the on-chain backend for
+[kit.space](https://kit.space). It is deployed into the browser SpacekitVM via
+`spacekit-js` and uses the standard host ABI (`env`, `spacekit_storage`, events).
+
+### Architecture
+
+```mermaid
+flowchart TB
+  subgraph Browser["Browser (kit.space-website)"]
+    UI["React UI\nKitFeed / PostSignal / Guilds"]
+    SDK["protocol/ SDK\nEncode · Decode · useKitProtocol"]
+    VM["SpacekitVm (spacekit-js)"]
+    WASM["kit_protocol.wasm\nregistry · feed · reputation · marketplace"]
+    IDB["IndexedDB\nblock store + session"]
+  end
+
+  subgraph Network
+    SN["spacekit-storage-node\n:3030 P2P + API"]
+    CN["spacekit-compute-node\n:8747 JSON-RPC"]
+  end
+
+  UI --> SDK
+  SDK -->|submitTransaction / executeQuery| VM
+  VM --> WASM
+  VM --> IDB
+  VM -->|HeaderSyncClient| CN
+  VM -->|SpacekitSequencer.exportBundle| SN
+  SN <-->|P2P sync| CN
+```
+
+### Contract modules
+
+| Module | Opcodes | Purpose |
+| --- | --- | --- |
+| **registry** | `0x01`–`0x0F` | DID identity registration, guild CRUD, membership |
+| **feed** | `0x10`–`0x1F` | Posts (text/image/video/audio), category + guild + author indexes |
+| **reputation** | `0x20`–`0x2F` | Reactions (fire/heart/eyes), signal scores, author scores |
+| **marketplace** | `0x30`–`0x3F` | NFT listings, content-locked access, buy/delist |
+
+### Deployment
+
+```ts
+import { SpacekitVm } from "@spacekit/spacekit-js";
+
+const vm = new SpacekitVm({ storage, devMode: true });
+const wasm = await fetch("/wasm/kit_protocol.wasm");
+const contract = await vm.deployContract(
+  new Uint8Array(await wasm.arrayBuffer()),
+  "kit-protocol",
+);
+```
+
+### Submitting a transaction (example: create post)
+
+```ts
+import { Writer } from "kit.space-website/src/protocol/codec";
+
+const input = new Writer()
+  .u8(0x10)                    // OP_CREATE_POST
+  .string(callerDid)           // author DID
+  .u8(0)                       // POST_TYPE_TEXT
+  .u8(0)                       // FEED_PUBLIC
+  .string("tech")              // category
+  .string("")                  // guild ID (empty = no guild)
+  .string("My first post")    // title
+  .string("storage:abc123")   // content_ref (CID from storage node)
+  .u64(BigInt(Date.now()))     // created_at
+  .u8(2)                       // tag count
+  .string("spacekit")
+  .string("wasm")
+  .finish();
+
+const tx = await vm.submitTransaction(contract.id, input, callerDid);
+const block = await vm.mineBlock();
+// receipt.result contains the new post ID as u64 LE bytes
+```
+
+### Querying (no mining)
+
+```ts
+const query = new Writer().u8(0x12).u8(0xff).u32(0).u8(20).finish(); // LIST_POSTS
+const receipt = await vm.executeTransaction(contract.id, query, callerDid, 0n);
+// Decode receipt.result with the protocol Reader
+```
+
+### Storage node integration
+
+Post bodies, images, and media are stored off-chain via `spacekit-storage-node`
+(running at `localhost:3030`). The contract stores a `content_ref` (hash/CID)
+that the client resolves:
+
+```ts
+// Push content to storage node
+const res = await fetch("http://localhost:3030/api/v1/store", {
+  method: "POST",
+  headers: { "Content-Type": "application/octet-stream" },
+  body: postBody,
+});
+const { key } = await res.json();
+
+// Store `key` as content_ref in the contract
+// Later: resolve content
+const content = await fetch(`http://localhost:3030/api/v1/fetch/${key}`);
+```
+
+### Compute node sync
+
+Browser VMs sync with the canonical chain via `HeaderSyncClient`:
+
+```ts
+import { HeaderSyncClient } from "@spacekit/spacekit-js";
+
+const sync = new HeaderSyncClient({
+  rpcUrl: "http://localhost:8747/rpc",
+});
+
+const { headers, latestHeight } = await sync.syncHeaders(localHeight + 1);
+```
+
+Rollup bundles from the browser sequencer are exported to the storage node,
+which the compute node picks up for validation and inclusion in the canonical chain.
+
+### What is integrated today
+
+| Layer | Status | Details |
+| --- | --- | --- |
+| Rust contract (4 modules) | **Done** | Compiles to 136 KB WASM, deployed to `public/wasm/` |
+| TypeScript codec + ops | **Done** | `protocol/codec.ts`, `protocol/ops.ts` mirror Rust binary format |
+| Encode / Decode helpers | **Done** | `protocol/client.ts` — typed input builders and output parsers |
+| `useKitProtocol` hook | **Done** | Deploys WASM, exposes typed methods for all 4 modules |
+| `useKitFeed` hook | **Done** | Auto-deploys, seeds mock data, provides on-chain posts to feed |
+| `SpacekitVmProvider` (shared) | **Done** | Lifted to wrap both KitFeed and Kit pages |
+| KitFeed.tsx wired | **Done** | Uses `useKitFeed()` for post data source |
+
+### What is left to integrate
+
+| Task | Component | Description |
+| --- | --- | --- |
+| **Compute VM sync** | `SpacekitVmContext` | Wire `HeaderSyncClient` to poll a compute node and verify canonical block headers against the local chain |
+| **Sequencer bundle export** | `SpacekitVmContext` | POST rollup bundles from `onBundle` callback to storage node / compute node |
+| **Content resolution** | `useKitFeed` | Resolve `content_ref` from storage node instead of falling back to mock body text |
+| **PostSignal composer** | `PostSignal.tsx` | Wire the "+ POST" form to `kit.createPost()` + storage node content push |
+| **Guild operations** | `GuildsPage.tsx` | Wire JOIN / LEAVE / CREATE buttons to `kit.joinGuild()` / `kit.createGuild()` |
+| **NFT purchase flow** | `NFTUnlockOverlay` | Wire unlock button to `kit.buyNft()` with ASTRA value transfer |
+| **Reaction persistence** | `PostCard` / `ReactionBtn` | Already wired locally via `useKitFeed.react()`; needs network sync to persist across sessions |
+| **Balance sync** | `SpacekitVmContext` | Poll `vm_astraBalance` from compute node after header sync |
+| **Real-time updates** | New | WebSocket or polling for new blocks from other users on the network |
+| **DID wallet identity** | `useKitFeed` | Use actual DID from `spacekit-did` wallet instead of `localStorage` fallback |
 
 ## Ecosystem flow (diagram)
 ```mermaid

@@ -21,6 +21,7 @@ export {
 } from "./llm/registry.js";
 export { WebLlmAdapter } from "./llm/web_adapter.js";
 export type { LlmChatEngine, LlmChatMessage, TRMConfig } from "./llm/web_adapter.js";
+export { microgpt_forward, MICROGPT_VOCAB_SIZE } from "./llm/microgpt_forward.js";
 export { createInMemoryStorage, StorageNodeAdapter, IndexedDbStorageAdapter, syncWithStorageNode } from "./storage.js";
 export { instantiateWasm, callSpacekitMain } from "./runtime.js";
 // Contract clients are available via "@spacekit/spacekit-js/contracts"

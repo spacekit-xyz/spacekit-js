@@ -1,6 +1,7 @@
 export { createHost, createImports, LLM_STATUS } from "./host.js";
 export { registerLlmAdapter, unregisterLlmAdapter, listLlmAdapters, setActiveLlmAdapter, getActiveLlmAdapter, } from "./llm/registry.js";
 export { WebLlmAdapter } from "./llm/web_adapter.js";
+export { microgpt_forward, MICROGPT_VOCAB_SIZE } from "./llm/microgpt_forward.js";
 export { createInMemoryStorage, StorageNodeAdapter, IndexedDbStorageAdapter, syncWithStorageNode } from "./storage.js";
 export { instantiateWasm, callSpacekitMain } from "./runtime.js";
 export { SpacekitVm } from "./vm/spacekitvm.js";

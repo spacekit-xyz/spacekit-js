@@ -6,6 +6,7 @@ export const HOST_IMPORT_MODULES = [
     "spacekit_contract",
     "spacekit_fact",
     "spacekit_llm",
+    "spacekit_microgpt",
     "spacekit_reputation",
     "spacekit_storage"
 ];

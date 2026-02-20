@@ -3,6 +3,7 @@ export type { HostOptions, HostContext, TokenAdapter, NftAdapter, ReputationAdap
 export { registerLlmAdapter, unregisterLlmAdapter, listLlmAdapters, setActiveLlmAdapter, getActiveLlmAdapter, } from "./llm/registry.js";
 export { WebLlmAdapter } from "./llm/web_adapter.js";
 export type { LlmChatEngine, LlmChatMessage, TRMConfig } from "./llm/web_adapter.js";
+export { microgpt_forward, MICROGPT_VOCAB_SIZE } from "./llm/microgpt_forward.js";
 export { createInMemoryStorage, StorageNodeAdapter, IndexedDbStorageAdapter, syncWithStorageNode } from "./storage.js";
 export { instantiateWasm, callSpacekitMain } from "./runtime.js";
 export type { SpacekitVmOptions, MeteringCostTable, Block, Receipt, Transaction, TransactionSignature, SealedArchive, StateProof, StateSnapshot, TxProof, ReceiptProof, BlockHeader, FeePolicy, GasPolicy, PqSignatureVerifier, GenesisConfig, DidDocument, DidResolver, SecureBlockHeader, QuantumStateProof, } from "./vm/spacekitvm.js";

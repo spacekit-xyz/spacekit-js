@@ -140,6 +140,17 @@ export class StorageNodeAdapter implements StorageAdapter {
     return Array.isArray(json?.documents) ? json.documents : [];
   }
 
+  async deleteDocument(collection: string, id: string): Promise<boolean> {
+    const url = `${this.baseUrl}/api/documents/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`;
+    const res = await fetch(url, {
+      method: "DELETE",
+      headers: {
+        Authorization: `DID ${this.did}`,
+      },
+    });
+    return res.ok;
+  }
+
   async pullAllEntries(collection = this.collection): Promise<Array<{ key: Uint8Array; value: Uint8Array; version: number; deleted?: boolean; clock?: VectorClock }>> {
     const docs = await this.listDocuments(collection);
     const entries: Array<{ key: Uint8Array; value: Uint8Array; version: number; deleted?: boolean; clock?: VectorClock }> = [];

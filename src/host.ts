@@ -1,5 +1,6 @@
 import { MemoryView, LinearMemoryAllocator } from "./memory.js";
 import { StorageAdapter, createInMemoryStorage } from "./storage.js";
+import { microgpt_forward } from "./llm/microgpt_forward.js";
 
 export interface TokenAdapter {
   balanceOf(did: string): bigint;
@@ -66,14 +67,15 @@ export interface CapturedLlmRequest {
 
 /**
  * LLM Adapter interface for integrating language models with smart contracts.
- * 
+ *
  * The infer method is synchronous because WASM host functions cannot be async.
  * Implementations should pre-load models and cache responses.
- * 
- * Two-phase execution pattern:
- * 1. Contract runs in "capture mode" - llm_call records prompt but returns placeholder
- * 2. Host runs async inference with captured prompt
- * 3. Contract runs again - llm_call returns cached result
+ *
+ * Two-phase execution pattern (when using setCaptureMode):
+ * 1. Contract runs in "capture mode" – llm_call records the prompt and returns a
+ *    placeholder response (e.g. empty string) to the contract.
+ * 2. Host runs async inference with the captured prompt.
+ * 3. Contract runs again – llm_call returns the cached inference result.
  */
 export interface LlmAdapter {
   /**
@@ -648,11 +650,27 @@ export function createImports(ctx: HostContextImpl): WebAssembly.Imports {
     return ctx.llm.getStatus();
   };
 
+  /**
+   * Micro-GPT forward primitive: write logits to out_ptr (VOCAB_SIZE f32s).
+   * Signature: microgpt_forward(token_id: u32, pos_id: u32, out_ptr: u32) -> void
+   */
+  const microgptForward = (tokenId: number, posId: number, outPtr: number): void => {
+    const logits = microgpt_forward(tokenId, posId);
+    const bytes = new Uint8Array(logits.buffer, logits.byteOffset, logits.byteLength);
+    ctx.writeBytes(outPtr, bytes);
+  };
+
   const useGas = (amount: number) => {
     ctx.consumeGas(amount);
   };
 
+  // AssemblyScript-compiled WASM may import env.abort (e.g. for assertions). Provide a stub.
+  const envAbort = (message?: number, fileName?: number, line?: number, column?: number): void => {
+    console.warn("[SpaceKit] contract abort", { message, fileName, line, column });
+  };
+
   const baseEnv = {
+    abort: envAbort,
     storage_read: storageRead,
     storage_write: storageWrite,
     storage_save: storageWrite,
@@ -751,6 +769,9 @@ export function createImports(ctx: HostContextImpl): WebAssembly.Imports {
     spacekit_llm: {
       llm_inference: llmInference,
       llm_status: llmStatus,
+    },
+    spacekit_microgpt: {
+      microgpt_forward: microgptForward,
     },
   };
 }
