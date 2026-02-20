@@ -748,25 +748,37 @@ which the compute node picks up for validation and inclusion in the canonical ch
 | Rust contract (4 modules) | **Done** | Compiles to 136 KB WASM, deployed to `public/wasm/` |
 | TypeScript codec + ops | **Done** | `protocol/codec.ts`, `protocol/ops.ts` mirror Rust binary format |
 | Encode / Decode helpers | **Done** | `protocol/client.ts` — typed input builders and output parsers |
-| `useKitProtocol` hook | **Done** | Deploys WASM, exposes typed methods for all 4 modules |
+| `useKitProtocol` hook | **Done** | Deploys WASM, exposes typed methods for all 4 modules; reuses existing deployment |
 | `useKitFeed` hook | **Done** | Auto-deploys, seeds mock data, provides on-chain posts to feed |
 | `SpacekitVmProvider` (shared) | **Done** | Lifted to wrap both KitFeed and Kit pages |
 | KitFeed.tsx wired | **Done** | Uses `useKitFeed()` for post data source |
+| Compute VM header sync | **Done** | `HeaderSyncClient` polls `:8747/rpc` every 10 s, syncs canonical headers |
+| Sequencer bundle export | **Done** | `onBundle` exports bundles to storage node via `StorageNodeAdapter` |
+| Content resolution | **Done** | `useKitFeed.refresh()` resolves `content_ref` from storage node (`/api/documents/kit-content/…`) |
+| PostSignal composer | **Done** | TRANSMIT pushes body to storage node, calls `kit.createPost()` + optional `kit.listNft()` |
+| Guild operations | **Done** | JOIN / CREATE in `GuildsPage` call `kit.joinGuild()` / `kit.createGuild()` |
+| NFT purchase flow | **Done** | Unlock button calls `kit.buyNft()` with ASTRA value transfer via `useKitFeed.buyNft()` |
+| Balance sync | **Done** | Header sync poll also fetches `vm_astraBalance` and writes to local storage |
+| DID wallet identity | **Done** | `useDidWallet` generates Ed25519 keypair, derives `did:key`, persists in localStorage |
+| Reaction persistence | **Done** | `submitAndMine` routes through `sequencer.mineAndBundle()` → auto-flushes bundles every 5 blocks → exported to storage node |
+| Real-time block sync | **Done** | Header sync poll fetches full blocks from compute node via `vm_block` RPC, replays remote transactions locally |
+| DID registration | **Done** | `initVm` calls `vm.registerDid()` with the wallet's public key after VM creation |
+| Guild leave | **Done** | `leaveGuild` added to `useKitProtocol`; LEAVE button added to `GuildDetail` sidebar |
+| Quantum DID signing | **Done** | `useDidWallet` exposes `sign()` with Ed25519 + SLH-DSA upgrade path; algorithm stored in localStorage |
+| SLH-DSA WASM build | **Done** | `wasm-did/` crate compiles pure-Rust `slh-dsa` (FIPS-205) to 84 KB WASM; `slhDsa128sKeypair/Sign/Verify` + 192s variants |
+| `spacekit-did` no_std | **Done** | Conditional `#![no_std]` with `sphincs.rs` module; std-only types gated behind `feature = "std"` |
+| Quantum WASM loader | **Done** | `spacekit-js/src/quantum_did.ts` mirrors `loadQuantumVerkleWasm` pattern; `useDidWallet` loads via fetch+blob |
+| `upgradeToQuantum()` | **Done** | `useDidWallet.upgradeToQuantum()` generates SLH-DSA-SHA2-128s keypair in WASM, replaces stored identity |
+| Transaction signing | **Done** | `submitAndMine` creates `TransactionSignature` via `TxSignerFn` from `useDidWallet.sign()` before submitting; supports Ed25519 + SLH-DSA |
+| WebSocket real-time | **Done** | `SpacekitVmContext` connects to `ws://localhost:8747/ws` for instant block propagation; auto-reconnects with exponential backoff; polling kept as fallback |
 
-### What is left to integrate
+### Future enhancements
 
 | Task | Component | Description |
 | --- | --- | --- |
-| **Compute VM sync** | `SpacekitVmContext` | Wire `HeaderSyncClient` to poll a compute node and verify canonical block headers against the local chain |
-| **Sequencer bundle export** | `SpacekitVmContext` | POST rollup bundles from `onBundle` callback to storage node / compute node |
-| **Content resolution** | `useKitFeed` | Resolve `content_ref` from storage node instead of falling back to mock body text |
-| **PostSignal composer** | `PostSignal.tsx` | Wire the "+ POST" form to `kit.createPost()` + storage node content push |
-| **Guild operations** | `GuildsPage.tsx` | Wire JOIN / LEAVE / CREATE buttons to `kit.joinGuild()` / `kit.createGuild()` |
-| **NFT purchase flow** | `NFTUnlockOverlay` | Wire unlock button to `kit.buyNft()` with ASTRA value transfer |
-| **Reaction persistence** | `PostCard` / `ReactionBtn` | Already wired locally via `useKitFeed.react()`; needs network sync to persist across sessions |
-| **Balance sync** | `SpacekitVmContext` | Poll `vm_astraBalance` from compute node after header sync |
-| **Real-time updates** | New | WebSocket or polling for new blocks from other users on the network |
-| **DID wallet identity** | `useKitFeed` | Use actual DID from `spacekit-did` wallet instead of `localStorage` fallback |
+| **Signature verification on replay** | `SpacekitVmContext` | Verify `TransactionSignature` on remote blocks replayed via WebSocket/polling |
+| **Multi-node discovery** | `SpacekitVmContext` | Auto-discover compute nodes via mDNS or seed list instead of hardcoded localhost |
+| **Offline queue** | `SpacekitVmContext` | Queue transactions when offline and flush when reconnected |
 
 ## Ecosystem flow (diagram)
 ```mermaid

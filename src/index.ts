@@ -51,6 +51,8 @@ export type {
 export { SpacekitVm } from "./vm/spacekitvm.js";
 export { loadQuantumVerkleWasm } from "./quantum_verkle.js";
 export { verifyQuantumVerkleProof } from "./vm/quantum_verkle.js";
+export { loadQuantumDidWasm } from "./quantum_did.js";
+export type { QuantumDidWasmModule, QuantumDidWasmLoaderOptions, SlhDsaKeypair } from "./quantum_did.js";
 export type { QuantumVerkleOptions } from "./vm/quantum_verkle.js";
 
 // Signature verification utilities
