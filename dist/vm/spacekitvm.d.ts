@@ -2,6 +2,7 @@ import type { HostOptions, HostContext } from "../host.js";
 import type { StorageAdapter } from "../storage.js";
 import { type MerkleStep } from "./merkle.js";
 import { type QuantumVerkleOptions, type QuantumVerkleProof } from "./quantum_verkle.js";
+import { VerkleStateManager } from "./verkle_state.js";
 import { type GenesisConfig, type DidDocument, type DidResolver, type SecureBlockHeader } from "./genesis.js";
 import { type BlockStoreOptions } from "./blockstore.js";
 import { type SignatureAlgorithm } from "./signatures.js";
@@ -38,6 +39,16 @@ export interface Receipt {
     gasUsed?: number;
     receiptHash: string;
 }
+export interface VerkleWitness {
+    proofHex: string;
+    accessedKeys: Array<{
+        keyHex: string;
+        valueHex: string | null;
+        mode: "read" | "write";
+    }>;
+    preStateRoot: string;
+    postStateRoot: string;
+}
 export interface Block {
     height: number;
     prevHash: string;
@@ -50,6 +61,8 @@ export interface Block {
     transactions: Transaction[];
     receipts: Receipt[];
     header: BlockHeader;
+    /** Verkle witness for stateless validation (present when VerkleStateManager is active) */
+    witness?: VerkleWitness;
 }
 export interface TxProof {
     txId: string;
@@ -206,6 +219,7 @@ export declare class SpacekitVm {
     private readonly maxInternalCallDepth;
     private quantumVerkle?;
     private quantumVerkleOptions?;
+    private verkleState;
     constructor(options?: SpacekitVmOptions);
     initQuantumVerkle(): Promise<void>;
     /**
@@ -272,6 +286,7 @@ export declare class SpacekitVm {
      * Check if a storage key is protected from contract modification.
      */
     isKeyProtected(key: string): boolean;
+    private ensureVerkleState;
     deployContract(wasm: ArrayBuffer | Uint8Array | Response, contractId?: string): Promise<DeployedContract>;
     private callContractInternal;
     getContract(contractId: string): DeployedContract;
@@ -341,5 +356,15 @@ export declare class SpacekitVm {
     }>): void;
     computeStateRoot(): Promise<string>;
     computeQuantumStateRoot(): Promise<string>;
+    /** Get the VerkleStateManager (if stateless mode is active). */
+    getVerkleStateManager(): VerkleStateManager | null;
+    /**
+     * Verify a block statelessly using only the block header, transactions, and witness.
+     * Does not require holding any persistent state — suitable for light clients.
+     */
+    verifyBlockStateless(block: Block): Promise<{
+        valid: boolean;
+        reason?: string;
+    }>;
     private computeStateProof;
 }

@@ -6,10 +6,14 @@ export type { LlmChatEngine, LlmChatMessage, TRMConfig } from "./llm/web_adapter
 export { microgpt_forward, MICROGPT_VOCAB_SIZE } from "./llm/microgpt_forward.js";
 export { createInMemoryStorage, StorageNodeAdapter, IndexedDbStorageAdapter, syncWithStorageNode } from "./storage.js";
 export { instantiateWasm, callSpacekitMain } from "./runtime.js";
-export type { SpacekitVmOptions, MeteringCostTable, Block, Receipt, Transaction, TransactionSignature, SealedArchive, StateProof, StateSnapshot, TxProof, ReceiptProof, BlockHeader, FeePolicy, GasPolicy, PqSignatureVerifier, GenesisConfig, DidDocument, DidResolver, SecureBlockHeader, QuantumStateProof, } from "./vm/spacekitvm.js";
+export type { SpacekitVmOptions, MeteringCostTable, Block, Receipt, Transaction, TransactionSignature, SealedArchive, StateProof, StateSnapshot, TxProof, ReceiptProof, BlockHeader, FeePolicy, GasPolicy, PqSignatureVerifier, GenesisConfig, DidDocument, DidResolver, SecureBlockHeader, QuantumStateProof, VerkleWitness, } from "./vm/spacekitvm.js";
+export { VerkleStateManager } from "./vm/verkle_state.js";
+export type { AccessRecord } from "./vm/verkle_state.js";
 export { SpacekitVm } from "./vm/spacekitvm.js";
 export { loadQuantumVerkleWasm } from "./quantum_verkle.js";
 export { verifyQuantumVerkleProof } from "./vm/quantum_verkle.js";
+export { loadQuantumDidWasm } from "./quantum_did.js";
+export type { QuantumDidWasmModule, QuantumDidWasmLoaderOptions, SlhDsaKeypair } from "./quantum_did.js";
 export type { QuantumVerkleOptions } from "./vm/quantum_verkle.js";
 export type { SignatureAlgorithm, SignedMessage, SignatureVerifier, PqSignatureVerifierFunc, } from "./vm/signatures.js";
 export { verifyEd25519, signEd25519, generateEd25519Keypair, createSignatureVerifier, createTransactionMessage, hashTransactionMessage, signTransaction, verifyTransactionSignature, } from "./vm/signatures.js";

@@ -100,6 +100,16 @@ export class StorageNodeAdapter {
         const json = await res.json();
         return Array.isArray(json?.documents) ? json.documents : [];
     }
+    async deleteDocument(collection, id) {
+        const url = `${this.baseUrl}/api/documents/${encodeURIComponent(collection)}/${encodeURIComponent(id)}`;
+        const res = await fetch(url, {
+            method: "DELETE",
+            headers: {
+                Authorization: `DID ${this.did}`,
+            },
+        });
+        return res.ok;
+    }
     async pullAllEntries(collection = this.collection) {
         const docs = await this.listDocuments(collection);
         const entries = [];

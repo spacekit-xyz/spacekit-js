@@ -7,6 +7,7 @@ import { HOST_ABI_VERSION } from "./abi.js";
 import { Buffer } from "buffer";
 import { merkleRoot, merkleProof } from "./merkle.js";
 import { QuantumVerkleBridge, buildQuantumEntries, } from "./quantum_verkle.js";
+import { VerkleStateManager } from "./verkle_state.js";
 import { DEFAULT_GENESIS_CONFIG, computeGenesisHashSync, isProtectedKey, createDidResolver, didDocumentKey, createDidDocument, serializeDidDocument, } from "./genesis.js";
 import { IndexedDbBlockStore } from "./blockstore.js";
 import { createSignatureVerifier, verifyTransactionSignature, } from "./signatures.js";
@@ -77,13 +78,23 @@ export class SpacekitVm {
     maxInternalCallDepth = 8;
     quantumVerkle;
     quantumVerkleOptions;
+    verkleState = null;
     constructor(options = {}) {
         this.maxBlocksInMemory = options.maxBlocksInMemory ?? 100;
         const { storage, blockStore, ...hostOptions } = options;
         const registryAdapter = getActiveLlmAdapter();
+        // Wrap storage in VerkleStateManager for persistent tree + access tracking
+        let effectiveStorage = storage;
+        if (storage) {
+            const verkleOpts = options.quantumVerkle ?? {};
+            if (verkleOpts.enabled !== false) {
+                this.verkleState = new VerkleStateManager(storage, verkleOpts);
+                effectiveStorage = this.verkleState.toStorageAdapter();
+            }
+        }
         this.hostOptions = {
             ...hostOptions,
-            storage,
+            storage: effectiveStorage,
             llm: hostOptions.llm ?? registryAdapter ?? undefined,
             contractCall: (contractId, input, callerDid, value) => this.callContractInternal(contractId, input, callerDid, value),
         };
@@ -278,7 +289,13 @@ export class SpacekitVm {
     isKeyProtected(key) {
         return isProtectedKey(key);
     }
+    async ensureVerkleState() {
+        if (this.verkleState) {
+            await this.verkleState.init();
+        }
+    }
     async deployContract(wasm, contractId) {
+        await this.ensureVerkleState();
         const id = contractId ?? generateId("contract");
         const bytes = wasm instanceof Response ? await wasm.arrayBuffer() : wasm;
         const buffer = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -369,6 +386,11 @@ export class SpacekitVm {
         return receipt;
     }
     async submitTransaction(contractId, input, callerDid, value = 0n, signature) {
+        await this.ensureVerkleState();
+        // Mark the pre-block root when first tx in a batch arrives
+        if (this.pending.length === 0 && this.verkleState) {
+            this.verkleState.markPreBlockRoot();
+        }
         const nonce = this.nonceByDid.get(callerDid) ?? 0;
         const timestamp = Date.now();
         const tx = {
@@ -441,7 +463,19 @@ export class SpacekitVm {
         const txRoot = await merkleRoot(txHashes);
         const receiptRoot = await merkleRoot(receiptHashes);
         const stateRoot = await this.computeStateRoot();
-        const quantumStateRoot = await this.computeQuantumStateRoot();
+        // Use persistent verkle tree root if available, else fall back to recompute
+        let quantumStateRoot;
+        let witness;
+        if (this.verkleState) {
+            quantumStateRoot = await this.verkleState.flushRoot();
+            const { log, preRoot } = this.verkleState.flushAccessLog();
+            witness = await this.verkleState.generateWitness(log, preRoot);
+            // Mark the new pre-block root for next batch of txs
+            this.verkleState.markPreBlockRoot();
+        }
+        else {
+            quantumStateRoot = await this.computeQuantumStateRoot();
+        }
         const blockPayload = {
             height,
             prevHash,
@@ -487,7 +521,6 @@ export class SpacekitVm {
             abiVersion: HOST_ABI_VERSION,
             gasLimit: this.gasPolicy.gasLimit,
             gasUsed,
-            // Security audit trail
             genesisHash: this.genesisHash,
             totalSupply: this.currentSupply.toString(),
             supplyCap: this.genesisConfig.nativeCurrency.maxSupply.toString(),
@@ -504,6 +537,7 @@ export class SpacekitVm {
             transactions: txs,
             receipts,
             header,
+            witness,
         };
         this.blocks.push(block);
         this.pending = this.pending.slice(takeCount);
@@ -905,6 +939,46 @@ export class SpacekitVm {
         }
         const entries = buildQuantumEntries(storage);
         return this.quantumVerkle.computeRoot(entries);
+    }
+    /** Get the VerkleStateManager (if stateless mode is active). */
+    getVerkleStateManager() {
+        return this.verkleState;
+    }
+    /**
+     * Verify a block statelessly using only the block header, transactions, and witness.
+     * Does not require holding any persistent state — suitable for light clients.
+     */
+    async verifyBlockStateless(block) {
+        if (!block.witness) {
+            return { valid: false, reason: "block has no verkle witness" };
+        }
+        if (block.witness.postStateRoot !== block.quantumStateRoot) {
+            return {
+                valid: false,
+                reason: `witness postStateRoot ${block.witness.postStateRoot} != block quantumStateRoot ${block.quantumStateRoot}`,
+            };
+        }
+        // Verify the verkle multi-proof cryptographically
+        if (!this.verkleState) {
+            return { valid: false, reason: "no VerkleStateManager available for verification" };
+        }
+        const proofValid = await this.verkleState.verifyWitness(block.witness);
+        if (!proofValid) {
+            return { valid: false, reason: "verkle multi-proof verification failed" };
+        }
+        // Verify tx root
+        const txHashes = await Promise.all(block.transactions.map((tx) => hashTransaction(tx)));
+        const txRoot = await merkleRoot(txHashes);
+        if (txRoot !== block.txRoot) {
+            return { valid: false, reason: `txRoot mismatch: ${txRoot} != ${block.txRoot}` };
+        }
+        // Verify receipt root
+        const receiptHashes = block.receipts.map((r) => r.receiptHash);
+        const receiptRoot = await merkleRoot(receiptHashes);
+        if (receiptRoot !== block.receiptRoot) {
+            return { valid: false, reason: `receiptRoot mismatch: ${receiptRoot} != ${block.receiptRoot}` };
+        }
+        return { valid: true };
     }
     async computeStateProof(keyHex) {
         const storage = this.hostOptions.storage;

@@ -4,9 +4,11 @@ export { WebLlmAdapter } from "./llm/web_adapter.js";
 export { microgpt_forward, MICROGPT_VOCAB_SIZE } from "./llm/microgpt_forward.js";
 export { createInMemoryStorage, StorageNodeAdapter, IndexedDbStorageAdapter, syncWithStorageNode } from "./storage.js";
 export { instantiateWasm, callSpacekitMain } from "./runtime.js";
+export { VerkleStateManager } from "./vm/verkle_state.js";
 export { SpacekitVm } from "./vm/spacekitvm.js";
 export { loadQuantumVerkleWasm } from "./quantum_verkle.js";
 export { verifyQuantumVerkleProof } from "./vm/quantum_verkle.js";
+export { loadQuantumDidWasm } from "./quantum_did.js";
 export { verifyEd25519, signEd25519, generateEd25519Keypair, createSignatureVerifier, createTransactionMessage, hashTransactionMessage, signTransaction, verifyTransactionSignature, } from "./vm/signatures.js";
 // Genesis and DID resolution utilities
 export { DEFAULT_GENESIS_CONFIG, NETWORK_DECIMAL_PRESETS, getGenesisPresetForNetwork, computeGenesisHash, computeGenesisHashSync, getGenesisCanonical, isProtectedKey, PROTECTED_PREFIXES, createDidDocument, didDocumentKey, createDidResolver, } from "./vm/genesis.js";

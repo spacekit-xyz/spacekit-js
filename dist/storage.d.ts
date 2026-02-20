@@ -53,6 +53,7 @@ export declare class StorageNodeAdapter implements StorageAdapter {
         id: string;
         data: any;
     }>>;
+    deleteDocument(collection: string, id: string): Promise<boolean>;
     pullAllEntries(collection?: string): Promise<Array<{
         key: Uint8Array;
         value: Uint8Array;

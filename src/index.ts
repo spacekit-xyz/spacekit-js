@@ -47,7 +47,10 @@ export type {
   DidResolver,
   SecureBlockHeader,
   QuantumStateProof,
+  VerkleWitness,
 } from "./vm/spacekitvm.js";
+export { VerkleStateManager } from "./vm/verkle_state.js";
+export type { AccessRecord } from "./vm/verkle_state.js";
 export { SpacekitVm } from "./vm/spacekitvm.js";
 export { loadQuantumVerkleWasm } from "./quantum_verkle.js";
 export { verifyQuantumVerkleProof } from "./vm/quantum_verkle.js";

@@ -19,7 +19,9 @@ It runs the same contracts in a browser, Node.js, or Bun, exposes JSON-RPC and E
 for dapp compatibility, supports rollup bundling + Merkle proofs, and persists state
 locally (IndexedDB or polyfilled equivalent) or via `spacekit-storage-node` and connects
 to other `spacekit-compute-node` instances.
-It also integrates the Post-Quantum Quantum Verkle WASM module to compute state roots and proofs directly from VM storage.
+It integrates the Post-Quantum Quantum Verkle WASM module for stateless block
+validation — every mined block includes a verkle witness (multi-proof over accessed
+keys) so that light clients can verify state transitions without holding full state.
 
 ### Contents
 - [What is spacekit-js?](#what-is-spacekit-js)
@@ -37,6 +39,7 @@ It also integrates the Post-Quantum Quantum Verkle WASM module to compute state 
 - [Notes](#notes)
 - [Spacekit-JS VM](#spacekit-js-vm)
 - [Quantum Verkle](#quantum-verkle-state-root--proofs)
+- [Stateless Architecture](#stateless-architecture)
 - [Sequencer mode](#sequencer-mode-rollup-bundles)
 - [JSON-RPC extensions](#json-rpc-extensions)
 - [JSON-RPC HTTP server](#json-rpc-http-server)
@@ -107,6 +110,7 @@ flowchart LR
     SpacekitVM["SpacekitVM"]
     WASM["WASM contracts"]
     RPC["JSON-RPC / EIP-1193"]
+    Verkle["VerkleStateManager\n(quantum verkle tree)"]
     Storage["IndexedDB or polyfill"]
   end
   Browser --> SpacekitVM
@@ -114,7 +118,8 @@ flowchart LR
   Bun --> SpacekitVM
   SpacekitVM --> WASM
   SpacekitVM --> RPC
-  SpacekitVM --> Storage
+  SpacekitVM --> Verkle
+  Verkle --> Storage
 ```
 
 **Proof bridge architecture**
@@ -154,7 +159,8 @@ flowchart TB
 
 ### Production readiness
 Core functionality is production-ready (WASM execution, JSON-RPC, browser demo, rollup bundling,
-proofs, and storage sync). Optional components can be enabled as needed:
+proofs, storage sync, and stateless block validation). Optional components can be enabled as needed:
+- **Stateless validation**: enabled by default when `quantumVerkle.enabled` is true; blocks include verkle witnesses for light-client verification.
 - **Extension wallet + EIP-1193**: ready for dapp flows; permissions and listing metadata
   should be finalized before store release.
 - **PQ signing (SPHINCS+)**: optional path; requires building the WASM module and configuring keys.
@@ -187,8 +193,8 @@ SpacekitVM-JS integrates with:
   emphasizes local browser chains with rollup export and storage-node sync.
 - **vs Move (Aptos/Sui)**: Move is a dedicated VM; Spacekit uses WASM for portability
   and browser-first execution.
-- **vs zkVMs**: zkVMs focus on validity proofs; Spacekit focuses on Merkle proofs
-  and rollup bundles today, with zk layers possible later.
+- **vs zkVMs**: zkVMs focus on validity proofs; Spacekit uses quantum-resistant verkle
+  witnesses for stateless block validation, with zk layers possible later.
 - **vs PQ-focused chains**: Spacekit can enable PQ signing (SPHINCS+) for bundles/txs,
   while keeping standard Ed25519 for compatibility; PQ is optional and policy-driven.
 
@@ -200,6 +206,7 @@ SpacekitVM-JS integrates with:
 | JSON-RPC + EIP-1193 | ✅ | ✅ | ❌ |
 | Rollup bundling | ✅ | Optional | Optional |
 | PQ signing (optional) | ✅ | ❌ | ❌ |
+| Stateless block validation | ✅ (verkle witness) | ❌ | ❌ |
 
 ### Use cases
 - **Browser devnet**: fast local chain for dapp prototyping without running a full node.
@@ -208,6 +215,7 @@ SpacekitVM-JS integrates with:
 - **Bun server**: high-performance server-side execution with `Bun.serve()` or `node:http`.
 - **Rollup client**: mine blocks, produce bundles, and export to `spacekit-storage-node`.
 - **Edge verification**: verify Merkle proofs and receipts client-side for light clients.
+- **Stateless light clients**: validate blocks using only the block header + verkle witness, without downloading full state.
 - **Extension wallet**: EIP-1193 provider + signing for browser dapp flows.
 - **Cross-network bridging**: connect to `spacekit-compute-node` instances for testnet/mainnet parity.
 
@@ -407,8 +415,117 @@ const proof = await vm.getQuantumStateProof("0x...");
 console.log(root, proof);
 ```
 
-Stateless sync: mined block headers now include `quantumStateRoot`, so clients can
-verify `vm_quantumStateProof` responses against an authenticated header.
+Mined block headers include `quantumStateRoot`, so clients can verify
+`vm_quantumStateProof` responses against an authenticated header.
+
+## Stateless Architecture
+
+SpaceKit uses a **stateless blockchain** design where validators and light clients can
+verify blocks using only the block header, transactions, and a **verkle witness** — no
+full state database required.
+
+### How it works
+
+```mermaid
+flowchart TB
+  subgraph BlockProduction["Block Production (mineBlock)"]
+    TX["Pending TXs"]
+    EXEC["Execute TXs"]
+    TRACK["VerkleStateManager\nrecords every get()/set()"]
+    PROOF["create_multi_proof()\nover accessed keys"]
+    BLK["Block\n+ VerkleWitness"]
+  end
+  TX --> EXEC --> TRACK --> PROOF --> BLK
+
+  subgraph Validation["Stateless Validation (verifyBlockStateless)"]
+    RECV["Received Block"]
+    CHK1["Check witness.postStateRoot\n== block.quantumStateRoot"]
+    CHK2["verify_multi_proof()\ncryptographic proof check"]
+    CHK3["Verify txRoot + receiptRoot"]
+    OK["✓ Valid"]
+  end
+  RECV --> CHK1 --> CHK2 --> CHK3 --> OK
+```
+
+### Components
+
+| Component | Location | Role |
+| --- | --- | --- |
+| `VerkleStateManager` | `spacekit-js/src/vm/verkle_state.ts` | Wraps `StorageAdapter` with a live `QuantumVerkleWasm` tree; records access logs; generates witnesses |
+| `VerkleWitness` (Block) | `spacekit-js/src/vm/spacekitvm.ts` | Witness data attached to every mined block: `proofHex`, `accessedKeys[]`, `preStateRoot`, `postStateRoot` |
+| `verifyBlockStateless()` | `SpacekitVm` | Verifies a block using only its header + witness, no full state |
+| `QuantumTree<NistSisScheme>` | `spacekit-compute-node/swtchvm_node.rs` | Native Rust verkle tree maintained alongside the flat state `HashMap`; updated incrementally on every `set_storage()` |
+| `VerkleBlockWitness` | `spacekit-compute-node/swtchvm_node.rs` | Witness struct serialized into `SwtchvmBlock` for over-the-wire blocks |
+
+### VerkleStateManager (spacekit-js)
+
+When `quantumVerkle.enabled` is true (the default), `SpacekitVm` wraps its storage in
+a `VerkleStateManager` that:
+
+1. Maintains a **persistent** `QuantumVerkleWasm` tree — updated incrementally on each `set()`, avoiding full-rescan.
+2. Records every `get()` and `set()` as an `AccessRecord` with key, value, and mode (read/write).
+3. At `mineBlock()` time, flushes the access log and generates a `VerkleWitness` via `create_multi_proof()`.
+4. Attaches the witness to `Block.witness`.
+
+```ts
+import { VerkleStateManager, createInMemoryStorage } from "@spacekit/spacekit-js";
+
+const inner = createInMemoryStorage();
+const verkle = new VerkleStateManager(inner, {
+  moduleUrl: "/wasm/quantum_verkle_wasm.js",
+  wasmUrl: "/wasm/quantum_verkle_wasm_bg.wasm",
+});
+await verkle.init();
+
+verkle.set(key, value);                    // updates tree + records access
+const root = await verkle.flushRoot();     // current verkle root (no re-scan)
+const { log, preRoot } = verkle.flushAccessLog();
+const witness = await verkle.generateWitness(log, preRoot);
+```
+
+### Stateless block verification
+
+```ts
+const block = receivedFromWebSocketOrRPC();
+const result = await vm.verifyBlockStateless(block);
+if (!result.valid) {
+  console.error("Block rejected:", result.reason);
+}
+```
+
+The method checks:
+1. `witness.postStateRoot` matches `block.quantumStateRoot`
+2. `verify_multi_proof()` succeeds for all accessed keys
+3. `txRoot` and `receiptRoot` match the block's transactions and receipts
+
+### Compute node integration
+
+The Rust compute node (`spacekit-compute-node`) mirrors the same architecture natively:
+
+- `SwtchvmState` holds a live `QuantumTree<NistSisScheme>` alongside its `HashMap<(Address, Key), Value>` storage.
+- Every `set_storage()` call updates the tree incrementally.
+- `state_root()` returns the **verkle root** by default. The legacy merkle root is still available via `merkle_state_root()`.
+- Blocks include a `VerkleBlockWitness` with pre/post state roots.
+- After deserialization (e.g. loading from disk), `rebuild_verkle_tree()` repopulates the tree from the flat store.
+
+### Data flow (browser ↔ compute node)
+
+```mermaid
+sequenceDiagram
+  participant B as Browser (spacekit-js)
+  participant CN as Compute Node (Rust)
+
+  B->>B: submitTransaction() → storage reads/writes tracked
+  B->>B: mineBlock() → VerkleWitness generated
+  B->>CN: export bundle (via storage node)
+
+  CN->>CN: mine_block() → state_root() from QuantumTree
+  CN->>CN: VerkleBlockWitness attached to block
+  CN-->>B: WebSocket newBlock (includes witness)
+
+  B->>B: verifyBlockStateless(block) ✓
+  B->>B: replay transactions into local VM
+```
 
 ### Auto miner (timer)
 ```ts
@@ -631,20 +748,23 @@ flowchart TB
     UI["React UI\nKitFeed / PostSignal / Guilds"]
     SDK["protocol/ SDK\nEncode · Decode · useKitProtocol"]
     VM["SpacekitVm (spacekit-js)"]
+    VSM["VerkleStateManager\naccess tracking + witness gen"]
     WASM["kit_protocol.wasm\nregistry · feed · reputation · marketplace"]
     IDB["IndexedDB\nblock store + session"]
   end
 
   subgraph Network
     SN["spacekit-storage-node\n:3030 P2P + API"]
-    CN["spacekit-compute-node\n:8747 JSON-RPC"]
+    CN["spacekit-compute-node\n:8747 JSON-RPC + WS\nQuantumTree verkle state"]
   end
 
   UI --> SDK
   SDK -->|submitTransaction / executeQuery| VM
-  VM --> WASM
-  VM --> IDB
-  VM -->|HeaderSyncClient| CN
+  VM --> VSM
+  VSM --> WASM
+  VSM --> IDB
+  VM -->|WebSocket + HeaderSyncClient| CN
+  VM -->|verifyBlockStateless()| VM
   VM -->|SpacekitSequencer.exportBundle| SN
   SN <-->|P2P sync| CN
 ```
@@ -741,53 +861,49 @@ const { headers, latestHeight } = await sync.syncHeaders(localHeight + 1);
 Rollup bundles from the browser sequencer are exported to the storage node,
 which the compute node picks up for validation and inclusion in the canonical chain.
 
-### What is integrated today
+### Integration status
 
 | Layer | Status | Details |
 | --- | --- | --- |
-| Rust contract (4 modules) | **Done** | Compiles to 136 KB WASM, deployed to `public/wasm/` |
+| Rust contract (4 modules) | **Done** | Compiles to 136 KB WASM; registry, feed, reputation, marketplace |
 | TypeScript codec + ops | **Done** | `protocol/codec.ts`, `protocol/ops.ts` mirror Rust binary format |
-| Encode / Decode helpers | **Done** | `protocol/client.ts` — typed input builders and output parsers |
-| `useKitProtocol` hook | **Done** | Deploys WASM, exposes typed methods for all 4 modules; reuses existing deployment |
-| `useKitFeed` hook | **Done** | Auto-deploys, seeds mock data, provides on-chain posts to feed |
-| `SpacekitVmProvider` (shared) | **Done** | Lifted to wrap both KitFeed and Kit pages |
-| KitFeed.tsx wired | **Done** | Uses `useKitFeed()` for post data source |
-| Compute VM header sync | **Done** | `HeaderSyncClient` polls `:8747/rpc` every 10 s, syncs canonical headers |
+| `useKitProtocol` hook | **Done** | Deploys WASM, exposes typed methods; reuses existing deployment |
+| `useKitFeed` hook | **Done** | Auto-deploys, seeds mock data, resolves content from storage node |
+| Compute VM header sync | **Done** | `HeaderSyncClient` polls `:8747/rpc` every 10s; full block replay |
+| WebSocket real-time sync | **Done** | `ws://localhost:8747/ws` for instant block propagation; exponential backoff reconnects |
 | Sequencer bundle export | **Done** | `onBundle` exports bundles to storage node via `StorageNodeAdapter` |
-| Content resolution | **Done** | `useKitFeed.refresh()` resolves `content_ref` from storage node (`/api/documents/kit-content/…`) |
-| PostSignal composer | **Done** | TRANSMIT pushes body to storage node, calls `kit.createPost()` + optional `kit.listNft()` |
-| Guild operations | **Done** | JOIN / CREATE in `GuildsPage` call `kit.joinGuild()` / `kit.createGuild()` |
-| NFT purchase flow | **Done** | Unlock button calls `kit.buyNft()` with ASTRA value transfer via `useKitFeed.buyNft()` |
-| Balance sync | **Done** | Header sync poll also fetches `vm_astraBalance` and writes to local storage |
-| DID wallet identity | **Done** | `useDidWallet` generates Ed25519 keypair, derives `did:key`, persists in localStorage |
-| Reaction persistence | **Done** | `submitAndMine` routes through `sequencer.mineAndBundle()` → auto-flushes bundles every 5 blocks → exported to storage node |
-| Real-time block sync | **Done** | Header sync poll fetches full blocks from compute node via `vm_block` RPC, replays remote transactions locally |
-| DID registration | **Done** | `initVm` calls `vm.registerDid()` with the wallet's public key after VM creation |
-| Guild leave | **Done** | `leaveGuild` added to `useKitProtocol`; LEAVE button added to `GuildDetail` sidebar |
-| Quantum DID signing | **Done** | `useDidWallet` exposes `sign()` with Ed25519 + SLH-DSA upgrade path; algorithm stored in localStorage |
-| SLH-DSA WASM build | **Done** | `wasm-did/` crate compiles pure-Rust `slh-dsa` (FIPS-205) to 84 KB WASM; `slhDsa128sKeypair/Sign/Verify` + 192s variants |
-| `spacekit-did` no_std | **Done** | Conditional `#![no_std]` with `sphincs.rs` module; std-only types gated behind `feature = "std"` |
-| Quantum WASM loader | **Done** | `spacekit-js/src/quantum_did.ts` mirrors `loadQuantumVerkleWasm` pattern; `useDidWallet` loads via fetch+blob |
-| `upgradeToQuantum()` | **Done** | `useDidWallet.upgradeToQuantum()` generates SLH-DSA-SHA2-128s keypair in WASM, replaces stored identity |
-| Transaction signing | **Done** | `submitAndMine` creates `TransactionSignature` via `TxSignerFn` from `useDidWallet.sign()` before submitting; supports Ed25519 + SLH-DSA |
-| WebSocket real-time | **Done** | `SpacekitVmContext` connects to `ws://localhost:8747/ws` for instant block propagation; auto-reconnects with exponential backoff; polling kept as fallback |
+| Content resolution | **Done** | `useKitFeed.refresh()` resolves `content_ref` from storage node |
+| DID wallet identity | **Done** | `useDidWallet` generates Ed25519 keypair; `upgradeToQuantum()` for SLH-DSA |
+| Transaction signing | **Done** | `submitAndMine` signs via `TxSignerFn`; supports Ed25519 + SLH-DSA |
+| PostSignal composer | **Done** | Pushes body to storage node, calls `kit.createPost()` + `kit.listNft()` |
+| Guild operations | **Done** | CREATE / JOIN / LEAVE in `GuildsPage` |
+| NFT purchase flow | **Done** | `kit.buyNft()` with ASTRA value transfer |
+| Persistent verkle tree (JS) | **Done** | `VerkleStateManager` wraps storage with live `QuantumVerkleWasm`; incremental `set()` |
+| Storage access tracking | **Done** | Every `get()`/`set()` records `AccessRecord` with key, value, mode |
+| Verkle witnesses in blocks | **Done** | `mineBlock()` generates `VerkleWitness` via `create_multi_proof()`; attached to `Block.witness` |
+| Stateless block validation (JS) | **Done** | `vm.verifyBlockStateless(block)` — header + witness only, no full state |
+| Compute node verkle tree (Rust) | **Done** | `QuantumTree<NistSisScheme>` in `SwtchvmState`; `state_root()` returns verkle root |
+| Compute node witness | **Done** | `VerkleBlockWitness` included in `SwtchvmBlock` with pre/post state roots |
+| Stateless verification on replay | **Done** | `replayRemoteBlock()` verifies witness before applying remote blocks |
 
 ### Future enhancements
 
 | Task | Component | Description |
 | --- | --- | --- |
-| **Signature verification on replay** | `SpacekitVmContext` | Verify `TransactionSignature` on remote blocks replayed via WebSocket/polling |
 | **Multi-node discovery** | `SpacekitVmContext` | Auto-discover compute nodes via mDNS or seed list instead of hardcoded localhost |
 | **Offline queue** | `SpacekitVmContext` | Queue transactions when offline and flush when reconnected |
+| **Per-tx access tracking (compute node)** | `spacekit-compute-node` | Track per-transaction storage reads/writes during execution to generate fine-grained multi-proofs with `create_multi_proof()` |
 
 ## Ecosystem flow (diagram)
 ```mermaid
 flowchart LR
-  BrowserVM["Browser (spacekit-js)"] -->|mine + bundle| Sequencer[SpacekitSequencer]
-  NodeVM["Node.js (spacekit-js)"] -->|mine + bundle| Sequencer
-  BunVM["Bun (spacekit-js)"] -->|mine + bundle| Sequencer
+  BrowserVM["Browser (spacekit-js)\nVerkleStateManager"] -->|mine + bundle\n+ VerkleWitness| Sequencer[SpacekitSequencer]
+  NodeVM["Node.js (spacekit-js)\nVerkleStateManager"] -->|mine + bundle| Sequencer
+  BunVM["Bun (spacekit-js)\nVerkleStateManager"] -->|mine + bundle| Sequencer
   Sequencer -->|export bundle| StorageNode[spacekit-storage-node]
-  StorageNode -->|archive/sync| ComputeNode[spacekit-compute-node]
+  StorageNode -->|archive/sync| ComputeNode["spacekit-compute-node\nQuantumTree (Rust)"]
+  ComputeNode -->|blocks + witness\n(WS / RPC)| BrowserVM
+  BrowserVM -->|verifyBlockStateless()| BrowserVM
   BrowserVM -->|RPC/EIP-1193| Dapp[Dapp/Wallet]
   NodeVM -->|JSON-RPC HTTP| Dapp
   BunVM -->|JSON-RPC HTTP| Dapp
@@ -797,6 +913,10 @@ flowchart LR
 - **DID**: Decentralized Identifier used for callers and identities.
 - **Rollup bundle**: A batch of blocks sealed together for export/validation.
 - **Merkle proof**: Inclusion proof for tx/receipt/state roots.
+- **Verkle tree**: Quantum-resistant commitment tree (`spacekit-quantum-verkle`) used for stateless state proofs; replaces the legacy merkle tree for `quantumStateRoot`.
+- **Verkle witness**: A `VerkleWitness` containing a multi-proof, accessed keys, and pre/post state roots — included in blocks to enable stateless validation.
+- **Stateless validation**: Verifying a block using only the block header, transactions, and verkle witness — without holding the full state database.
+- **`VerkleStateManager`**: Wrapper around `StorageAdapter` that keeps a live `QuantumVerkleWasm` tree in sync and tracks key access for witness generation.
 - **EIP-1193**: Ethereum provider interface (`window.ethereum`).
 - **LWW**: Last-write-wins merge strategy for sync conflicts.
 - **Multi-runtime**: Ability to run the same codebase on browser, Node.js, and Bun.
